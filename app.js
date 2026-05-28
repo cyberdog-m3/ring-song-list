@@ -71,7 +71,7 @@ async function init() {
     renderSongRanking(state.songs);
     renderArtistCloud(state.songs);
     initRandomPick(state.songs);
-    renderMemeHighlights(state.songs);
+    renderMemeHighlights(state.songs, state.videos);
     renderDataCredits(state.songs);
     applyFilters();
   } catch (error) {
@@ -150,14 +150,14 @@ function bindEvents() {
   });
 
   elements.memeHighlights?.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-meme-title]");
+    const button = event.target.closest("[data-meme-query]");
     if (!button) return;
 
-    state.filter = "sp";
-    state.query = button.dataset.memeTitle || "";
+    state.filter = button.dataset.memeFilter || "all";
+    state.query = button.dataset.memeQuery || "";
     state.visibleCount = PAGE_SIZE;
     elements.searchInput.value = state.query;
-    elements.chips.forEach((chip) => chip.classList.toggle("is-active", chip.dataset.filter === "sp"));
+    elements.chips.forEach((chip) => chip.classList.toggle("is-active", chip.dataset.filter === state.filter));
     applyFilters();
     document.querySelector("#resultsHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
@@ -412,51 +412,63 @@ function renderSongRanking(songs) {
   });
 }
 
-function renderMemeHighlights(songs) {
+function renderMemeHighlights(songs, videos) {
   if (!elements.memeHighlights) return;
 
-  const highlights = buildMemeHighlights(songs).slice(0, 8);
+  const highlights = buildMemeHighlights(songs, videos).slice(0, 8);
   if (!highlights.length) {
-    elements.memeHighlights.innerHTML = '<p class="meme-empty">目前還沒有可顯示的 SP 片段。</p>';
+    elements.memeHighlights.innerHTML = '<p class="meme-empty">目前還沒有可顯示的留言熱點。</p>';
     return;
   }
 
   elements.memeHighlights.innerHTML = highlights.map(renderMemeHighlight).join("");
 }
 
-function buildMemeHighlights(songs) {
-  const byVideo = new Map();
+function buildMemeHighlights(songs, videos) {
+  const songStatsByVideo = new Map();
   for (const song of songs) {
-    if (!isMemeSegment(song)) continue;
-
-    const current = byVideo.get(song.video_id) || {
-      videoId: song.video_id,
-      videoTitle: song.video_title,
-      streamDate: song.stream_date,
-      date: song.date,
-      metrics: song.videoMetric || null,
+    const current = songStatsByVideo.get(song.video_id) || {
+      rowCount: 0,
+      songCount: 0,
       segments: [],
       spCount: 0,
     };
 
-    current.segments.push(song);
-    if (song.category === "SP") current.spCount += 1;
-    if (song.stream_date > current.streamDate) current.streamDate = song.stream_date;
-    byVideo.set(song.video_id, current);
+    current.rowCount += 1;
+    if (song.entryType === "song") current.songCount += 1;
+    if (isMemeSegment(song)) {
+      current.segments.push(song);
+      if (song.category === "SP") current.spCount += 1;
+    }
+    songStatsByVideo.set(song.video_id, current);
   }
 
-  return [...byVideo.values()]
-    .map((item) => {
-      item.segments.sort((a, b) => a.seconds - b.seconds);
-      item.feature = item.segments.find((segment) => segment.category === "SP") || item.segments[0];
-      item.viewCount = item.metrics?.viewCount || 0;
-      item.commentSampleCount = item.metrics?.commentSampleCount || 0;
-      return item;
+  return videos
+    .map((video) => {
+      if (String(video.status || "").startsWith("skipped_")) return null;
+      const stats = songStatsByVideo.get(video.video_id);
+      if (!stats?.rowCount) return null;
+
+      const segments = [...stats.segments].sort((a, b) => a.seconds - b.seconds);
+      return {
+        videoId: video.video_id,
+        videoTitle: video.video_title,
+        streamDate: video.stream_date,
+        date: video.stream_date ? new Date(`${video.stream_date}T00:00:00`) : null,
+        segments,
+        feature: segments.find((segment) => segment.category === "SP") || segments[0] || null,
+        spCount: stats.spCount,
+        songCount: stats.songCount,
+        rowCount: stats.rowCount,
+        viewCount: video.viewCount || 0,
+        commentSampleCount: video.commentSampleCount || 0,
+      };
     })
+    .filter((item) => item && item.commentSampleCount > 0)
     .sort((a, b) => (
       b.commentSampleCount - a.commentSampleCount
       || b.spCount - a.spCount
-      || b.segments.length - a.segments.length
+      || b.songCount - a.songCount
       || b.viewCount - a.viewCount
       || compareDateDesc(a, b)
       || a.videoTitle.localeCompare(b.videoTitle, "zh-Hant")
@@ -470,19 +482,18 @@ function isMemeSegment(song) {
 }
 
 function renderMemeHighlight(item, index) {
-  const feature = item.feature;
   const meta = [
     item.commentSampleCount ? `留言樣本 ${formatCompactNumber(item.commentSampleCount)}` : "留言樣本 0",
     item.spCount ? `SP ${item.spCount}` : "",
-    `${item.segments.length} 個片段`,
+    item.songCount ? `歌曲 ${item.songCount}` : `${item.rowCount} 個片段`,
     item.streamDate,
   ].filter(Boolean).join(" · ");
 
   return `
-    <button class="meme-item" type="button" data-meme-title="${escapeAttribute(item.videoTitle)}">
+    <button class="meme-item" type="button" data-meme-query="${escapeAttribute(item.videoTitle)}" data-meme-filter="all">
       <span class="rank-number">${index + 1}</span>
       <span class="meme-item-main">
-        <strong>${escapeHtml(feature.song_title)}</strong>
+        <strong>${escapeHtml(item.videoTitle)}</strong>
         <small>${escapeHtml(meta)}</small>
       </span>
       <span class="meme-comment-count">${formatCompactNumber(item.commentSampleCount)}</span>
