@@ -569,92 +569,6 @@ a {
   font-size: 12px;
 }
 
-.section-head {
-  display: grid;
-  gap: 5px;
-  margin-bottom: 14px;
-}
-
-.section-head h2 {
-  margin: 0;
-  font-size: clamp(28px, 4vw, 44px);
-  line-height: 1.06;
-}
-
-.starter-guide {
-  width: min(var(--max), calc(100% - 36px));
-  margin: 10px auto 0;
-  padding: 22px 0 8px;
-}
-
-.starter-cards {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.starter-card {
-  display: grid;
-  align-content: start;
-  gap: 8px;
-  min-height: 176px;
-  border: 1px solid rgba(255, 248, 239, 0.12);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(145deg, rgba(255, 124, 156, 0.08), transparent 48%),
-    rgba(33, 29, 27, 0.72);
-  color: var(--text);
-  cursor: pointer;
-  padding: 15px;
-  text-align: left;
-  transition:
-    background 180ms ease,
-    border-color 180ms ease,
-    transform 180ms ease;
-}
-
-.starter-card:hover,
-.starter-card:focus-visible {
-  border-color: rgba(255, 124, 156, 0.42);
-  background:
-    linear-gradient(145deg, rgba(255, 124, 156, 0.12), transparent 48%),
-    rgba(43, 37, 33, 0.9);
-  outline: none;
-  transform: translateY(-2px);
-}
-
-.starter-card span,
-.starter-card em {
-  color: var(--accent-strong);
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 850;
-  text-transform: uppercase;
-}
-
-.starter-card strong {
-  display: -webkit-box;
-  overflow: hidden;
-  font-size: 18px;
-  line-height: 1.22;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.starter-card small {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.starter-card em {
-  align-self: end;
-  color: var(--mint);
-}
-
 .daily-pick {
   display: grid;
   grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);
@@ -1428,9 +1342,6 @@ a {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
-  .starter-cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 720px) {
@@ -1468,7 +1379,6 @@ a {
   .search-stage,
   .support-strip,
   .trust-ribbon,
-  .starter-guide,
   .daily-pick,
   .workspace,
   .site-footer {
@@ -1501,7 +1411,6 @@ a {
     grid-template-columns: 1fr;
   }
 
-  .starter-cards,
   .trust-ribbon {
     grid-template-columns: 1fr;
   }

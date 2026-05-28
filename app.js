@@ -40,7 +40,6 @@ const elements = {
   songRanking: document.querySelector("#songRanking"),
   artistCloud: document.querySelector("#artistCloud"),
   memeHighlights: document.querySelector("#memeHighlights"),
-  starterCards: document.querySelector("#starterCards"),
   dailyThumb: document.querySelector("#dailyThumb"),
   dailyTitle: document.querySelector("#dailyTitle"),
   dailyMeta: document.querySelector("#dailyMeta"),
@@ -78,7 +77,6 @@ async function init() {
     renderQuickSearches(state.songs);
     renderSongRanking(state.songs);
     renderArtistCloud(state.songs);
-    renderStarterGuide(state.songs, state.videos);
     initRandomPick(state.songs);
     renderMemeHighlights(state.songs, state.videos);
     renderDataCredits(state.songs);
@@ -168,19 +166,6 @@ function bindEvents() {
     const button = event.target.closest("[data-quick-query]");
     if (!button) return;
     setSearch(button.dataset.quickQuery || "", button.dataset.quickFilter || "all", { focusSearch: true });
-  });
-
-  elements.starterCards?.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-starter-query], [data-starter-version-key]");
-    if (!button) return;
-
-    if (button.dataset.starterVersionKey) {
-      const song = state.songs.find((entry) => entry.versionKey === button.dataset.starterVersionKey);
-      if (song) openVersionsForSong(song);
-      return;
-    }
-
-    setSearch(button.dataset.starterQuery || "", button.dataset.starterFilter || "all", { scrollResults: true });
   });
 
   elements.memeHighlights?.addEventListener("click", (event) => {
@@ -508,78 +493,6 @@ function renderMemeHighlights(songs, videos) {
   }
 
   elements.memeHighlights.innerHTML = highlights.map(renderMemeHighlight).join("");
-}
-
-function renderStarterGuide(songs, videos) {
-  if (!elements.starterCards) return;
-
-  const songCandidates = songs.filter(isSongCandidate);
-  const latestSong = [...songCandidates].sort(compareVersionDesc)[0];
-  const sleepSong = [...songCandidates].filter((song) => song.isSleep).sort(compareVersionDesc)[0];
-  const hotVideo = buildMemeHighlights(songs, videos)[0];
-  const spSegment = [...songs].filter((song) => song.category === "SP").sort(compareVersionDesc)[0];
-  const versionEntry = [...state.songGroups.values()]
-    .filter((versions) => versions.length > 1)
-    .sort((a, b) => b.length - a.length || compareVersionDesc(a[0], b[0]))[0]?.[0];
-
-  const cards = [
-    latestSong && {
-      kicker: "最新補檔",
-      title: latestSong.video_title,
-      meta: [latestSong.stream_date, `${getSongsByVideo(latestSong.video_id).length} 首`].filter(Boolean).join(" · "),
-      action: "看這場歌單",
-      query: latestSong.video_title,
-      filter: "all",
-    },
-    sleepSong && {
-      kicker: "伴睡入口",
-      title: sleepSong.video_title,
-      meta: [sleepSong.stream_date, displayArtist(sleepSong), sleepSong.song_title].filter(Boolean).join(" · "),
-      action: "找伴睡歌回",
-      query: sleepSong.video_title,
-      filter: "sleep",
-    },
-    hotVideo && {
-      kicker: "留言最多",
-      title: hotVideo.videoTitle,
-      meta: [`留言樣本 ${formatCompactNumber(hotVideo.commentSampleCount)}`, `歌曲 ${hotVideo.songCount}`].join(" · "),
-      action: "看同場歌曲",
-      query: hotVideo.videoTitle,
-      filter: "all",
-    },
-    spSegment && {
-      kicker: "名場面",
-      title: spSegment.song_title,
-      meta: [spSegment.stream_date, spSegment.video_title].filter(Boolean).join(" · "),
-      action: "看同場 SP",
-      query: spSegment.video_title,
-      filter: "sp",
-    },
-    versionEntry && {
-      kicker: "多版本",
-      title: versionEntry.song_title,
-      meta: `${getSongVersions(versionEntry).length} 個版本 · ${displayArtist(versionEntry)}`,
-      action: "比較版本",
-      versionKey: versionEntry.versionKey,
-    },
-  ].filter(Boolean);
-
-  elements.starterCards.innerHTML = cards.map(renderStarterCard).join("");
-}
-
-function renderStarterCard(card) {
-  const attrs = card.versionKey
-    ? `data-starter-version-key="${escapeAttribute(card.versionKey)}"`
-    : `data-starter-query="${escapeAttribute(card.query)}" data-starter-filter="${escapeAttribute(card.filter || "all")}"`;
-
-  return `
-    <button class="starter-card" type="button" ${attrs}>
-      <span>${escapeHtml(card.kicker)}</span>
-      <strong>${escapeHtml(card.title)}</strong>
-      <small>${escapeHtml(card.meta)}</small>
-      <em>${escapeHtml(card.action)}</em>
-    </button>
-  `;
 }
 
 function buildMemeHighlights(songs, videos) {
