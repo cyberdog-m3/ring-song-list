@@ -74,7 +74,7 @@ async function init() {
 
     populateYearSelect(state.songs);
     renderStats(state.songs, state.videos);
-    renderQuickSearches(state.songs);
+    renderQuickSearches();
     renderSongRanking(state.songs);
     renderArtistCloud(state.songs);
     initRandomPick(state.songs);
@@ -395,35 +395,12 @@ function renderStats(songs, videos) {
   }
 }
 
-function renderQuickSearches(songs) {
+function renderQuickSearches() {
   if (!elements.quickSearches) return;
-
-  const artistCounts = new Map();
-  const songCounts = new Map();
-  for (const song of songs) {
-    if (!isSongCandidate(song)) continue;
-    if (song.canonicalArtist) artistCounts.set(song.canonicalArtist, (artistCounts.get(song.canonicalArtist) || 0) + 1);
-    songCounts.set(song.song_title, (songCounts.get(song.song_title) || 0) + 1);
-  }
-
-  const artists = [...artistCounts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"))
-    .slice(0, 4)
-    .map(([label]) => ({ label, filter: "all" }));
-  const songsTop = [...songCounts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"))
-    .slice(0, 3)
-    .map(([label]) => ({ label, filter: "all" }));
-  const fixed = [
-    { label: "伴睡", filter: "sleep" },
-    { label: "SP", filter: "sp" },
-  ];
 
   elements.quickSearches.innerHTML = [
     '<span>快速找：</span>',
-    ...fixed.concat(artists, songsTop).map((item) => (
-      `<button type="button" data-quick-query="${escapeAttribute(item.filter === "all" ? item.label : "")}" data-quick-filter="${escapeAttribute(item.filter)}">${escapeHtml(item.label)}</button>`
-    )),
+    '<button type="button" data-quick-query="椅" data-quick-filter="all">椅</button>',
   ].join("");
 }
 
