@@ -453,6 +453,7 @@ function renderSongRanking(songs) {
   const counts = new Map();
   for (const song of songs) {
     if (!isSongCandidate(song)) continue;
+    if (!song.canonicalArtist) continue;
     const title = song.song_title.trim();
     if (!title) continue;
     const key = normalizeText(title);
