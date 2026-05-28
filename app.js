@@ -422,27 +422,16 @@ function pickRandomSong(avoidCurrent = false) {
 }
 
 function renderDataCredits(songs) {
-  const sourceCounts = new Map();
   const scrapedDates = [];
 
   for (const song of songs) {
-    if (song.sourceAuthor) {
-      sourceCounts.set(song.sourceAuthor, (sourceCounts.get(song.sourceAuthor) || 0) + 1);
-    }
     if (song.scraped_at) {
       const date = new Date(song.scraped_at);
       if (!Number.isNaN(date.getTime())) scrapedDates.push(date);
     }
   }
 
-  const sources = [...sourceCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"));
-  if (!sources.length) {
-    elements.sourceThanks.textContent = "資料來源感謝：歌回留言中的時間軸整理者";
-  } else {
-    const names = sources.slice(0, 3).map(([name]) => name);
-    const suffix = sources.length > names.length ? ` 等 ${sources.length} 位` : "";
-    elements.sourceThanks.textContent = `資料來源感謝：${names.join("、")}${suffix} 的歌回時間軸留言整理`;
-  }
+  elements.sourceThanks.textContent = "資料來源感謝：@MOMO-no3rc 的歌回時間軸標記留言整理";
 
   if (!scrapedDates.length) {
     elements.dataUpdated.textContent = "資料更新：-";
