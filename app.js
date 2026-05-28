@@ -1,9 +1,12 @@
 const CSV_URL = "./data/songs.csv";
+const VIDEOS_CSV_URL = "./data/videos.csv";
 const PAGE_SIZE = 40;
 const MEME_SEGMENT_PATTERN = /Yee|PON|翻|奪權|傘電|借你|小火龍|peko|耳膜|大福|紅包|高清清唱|The釣|練舞功|主播登場|好油|喵/i;
 
 const state = {
   songs: [],
+  videos: [],
+  videoMetrics: new Map(),
   filtered: [],
   songGroups: new Map(),
   randomPool: [],
@@ -53,9 +56,14 @@ async function init() {
 
   try {
     setStatus("載入歌單資料中");
-    const csvText = await fetchCsv();
-    const rows = parseCsv(csvText);
-    state.songs = rows.map(enrichSong).filter((song) => song.video_id && song.youtube_url);
+    const [songCsvText, videoCsvText] = await Promise.all([
+      fetchCsv(CSV_URL),
+      fetchCsv(VIDEOS_CSV_URL),
+    ]);
+    const rows = parseCsv(songCsvText);
+    state.videos = parseCsv(videoCsvText).map(enrichVideo);
+    state.videoMetrics = new Map(state.videos.map((video) => [video.video_id, video]));
+    state.songs = rows.map((row) => enrichSong(row, state.videoMetrics)).filter((song) => song.video_id && song.youtube_url);
     state.songGroups = buildSongGroups(state.songs);
 
     populateYearSelect(state.songs);
@@ -171,8 +179,8 @@ function bindEvents() {
   });
 }
 
-async function fetchCsv() {
-  const response = await fetch(CSV_URL, { cache: "no-store" });
+async function fetchCsv(url) {
+  const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`CSV fetch failed: ${response.status}`);
   }
@@ -226,7 +234,18 @@ function parseCsv(text) {
     .map((entry) => Object.fromEntries(headers.map((header, index) => [header, entry[index] || ""])));
 }
 
-function enrichSong(song) {
+function enrichVideo(video) {
+  return {
+    ...video,
+    viewCount: numberField(video.view_count),
+    likeCount: numberField(video.like_count),
+    commentSampleCount: numberField(video.comment_sample_count),
+    durationSeconds: numberField(video.duration_seconds),
+    publishedAt: video.published_at || "",
+  };
+}
+
+function enrichSong(song, videoMetrics) {
   const date = song.stream_date ? new Date(`${song.stream_date}T00:00:00`) : null;
   const year = Number(song.stream_date?.slice(0, 4)) || 0;
   const entryType = song.entry_type || (song.category ? "category" : "song");
@@ -234,6 +253,7 @@ function enrichSong(song) {
   const canonicalArtist = canonicalizeArtist(song.artist);
   const artistSearchText = artistAliasSearchText(canonicalArtist);
   const sourceAuthor = song.source_comment_author?.trim() || "";
+  const videoMetric = videoMetrics.get(song.video_id) || null;
   const normalized = normalizeText([
     song.song_title,
     song.artist,
@@ -252,6 +272,7 @@ function enrichSong(song) {
     category,
     canonicalArtist,
     sourceAuthor,
+    videoMetric,
     normalized,
     titleNormalized: normalizeText(song.song_title),
     artistNormalized: normalizeText([song.artist, canonicalArtist, artistSearchText].join(" ")),
@@ -272,6 +293,11 @@ function normalizeText(text) {
     .replace(/\p{Diacritic}/gu, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function numberField(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : 0;
 }
 
 function normalizeCategory(category) {
@@ -414,6 +440,7 @@ function buildMemeHighlights(songs) {
       videoTitle: song.video_title,
       streamDate: song.stream_date,
       date: song.date,
+      metrics: song.videoMetric || null,
       segments: [],
       spCount: 0,
       songCount: songCounts.get(song.video_id) || 0,
@@ -430,17 +457,31 @@ function buildMemeHighlights(songs) {
       item.segments.sort((a, b) => a.seconds - b.seconds);
       item.feature = item.segments.find((segment) => segment.category === "SP") || item.segments[0];
       item.density = item.segments.length / Math.max(1, item.songCount);
+      item.viewCount = item.metrics?.viewCount || 0;
+      item.likeCount = item.metrics?.likeCount || 0;
+      item.commentSampleCount = item.metrics?.commentSampleCount || 0;
+      item.engagementRate = item.viewCount > 0 ? item.likeCount / item.viewCount : 0;
       item.score = item.spCount * 14
         + item.segments.length * 9
         + Math.min(18, Math.round(item.density * 80))
+        + Math.log10(item.viewCount + 1) * 7
+        + Math.log10(item.likeCount + 1) * 12
+        + Math.log10(item.commentSampleCount + 1) * 6
+        + Math.min(16, item.engagementRate * 160)
         + Math.max(0, (item.date?.getFullYear() || 2022) - 2022);
       return item;
     })
     .sort((a, b) => b.score - a.score || compareDateDesc(a, b) || a.videoTitle.localeCompare(b.videoTitle, "zh-Hant"))
-    .map((item, index) => ({
-      ...item,
-      heat: Math.max(58, 99 - index * 7),
-    }));
+    .map((item, index, items) => {
+      const maxScore = items[0]?.score || 0;
+      const minScore = items.at(-1)?.score || 0;
+      const spread = Math.max(1, maxScore - minScore);
+      const heat = Math.round(60 + ((item.score - minScore) / spread) * 39) - Math.min(index, 2);
+      return {
+        ...item,
+        heat: Math.min(99, Math.max(1, heat)),
+      };
+    });
 }
 
 function isMemeSegment(song) {
@@ -456,6 +497,9 @@ function renderMemeHighlight(item, index) {
     item.streamDate,
     `${item.segments.length} 個片段`,
     item.spCount ? `SP ${item.spCount}` : "",
+    item.viewCount ? `觀看 ${formatCompactNumber(item.viewCount)}` : "",
+    item.likeCount ? `喜歡 ${formatCompactNumber(item.likeCount)}` : "",
+    item.commentSampleCount ? `留言樣本 ${formatCompactNumber(item.commentSampleCount)}` : "",
     `SP 指數 ${item.heat}`,
   ].filter(Boolean).join(" · ");
 
@@ -768,6 +812,13 @@ function thumbnailUrl(videoId, quality = "mqdefault") {
 
 function formatNumber(value) {
   return new Intl.NumberFormat("zh-Hant-TW").format(value);
+}
+
+function formatCompactNumber(value) {
+  return new Intl.NumberFormat("zh-Hant-TW", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
 }
 
 function formatDateTime(date) {
