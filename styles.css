@@ -856,6 +856,14 @@ a {
   font-weight: 800;
 }
 
+.footer-contact a,
+.legal-section a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 248, 239, 0.3);
+  text-underline-offset: 4px;
+}
+
 .footer-links {
   display: flex;
   flex-wrap: wrap;
