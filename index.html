@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>綾音Ring 歌回索引</title>
+    <meta
+      name="description"
+      content="綾音Ring 歌回歌曲查詢網站，整理公開歌回中的曲目、歌手與 YouTube 時間連結。"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar" aria-label="網站導覽">
+        <a class="brand" href="./" aria-label="綾音Ring 歌回索引首頁">
+          <img
+            src="https://yt3.googleusercontent.com/KPk5cOSTM00SKClscYck2VGi54ro7nWYbSgm0EGhaScp7_gcpKCxy0EhUvbwfokS2t3kttNZEiA=s160-c-k-c0x00ffffff-no-rj"
+            alt="綾音Ring 頭像"
+          />
+          <span>
+            <strong>綾音Ring</strong>
+            <small>Song Archive</small>
+          </span>
+        </a>
+        <nav class="topbar-actions" aria-label="外部連結">
+          <a href="https://www.youtube.com/@ring77-acglive" target="_blank" rel="noreferrer">YouTube</a>
+          <a href="https://twitter.com/ACG_Ring" target="_blank" rel="noreferrer">Twitter</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="page-title">
+          <div class="hero-copy">
+            <p class="eyebrow">ACGlive Singing Stream Index</p>
+            <h1 id="page-title"><span>綾音Ring</span><span>歌回索引</span></h1>
+            <p class="hero-subtitle">把公開歌回中的曲目、歌手與時間軸整理成可搜尋的資料庫，想聽哪一首就直接跳到那一刻。</p>
+          </div>
+
+          <div class="hero-visual" aria-hidden="true">
+            <div class="vinyl">
+              <div class="vinyl-label">
+                <span>Ring</span>
+              </div>
+            </div>
+            <div class="waveform">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+          </div>
+        </section>
+
+        <section class="search-stage" aria-label="歌曲搜尋">
+          <div class="search-panel">
+            <label class="search-label" for="searchInput">搜尋</label>
+            <div class="search-box">
+              <input
+                id="searchInput"
+                type="search"
+                autocomplete="off"
+                placeholder="輸入歌曲、歌手或直播標題"
+              />
+              <button id="clearSearch" type="button">清除</button>
+            </div>
+
+            <div class="controls" aria-label="篩選與排序">
+              <div class="chip-group" role="group" aria-label="快速篩選">
+                <button class="chip is-active" type="button" data-filter="all">全部</button>
+                <button class="chip" type="button" data-filter="sleep">伴睡</button>
+                <button class="chip" type="button" data-filter="theme">主題歌回</button>
+                <button class="chip" type="button" data-filter="schedule">周表</button>
+                <button class="chip" type="button" data-filter="sp">SP</button>
+                <button class="chip" type="button" data-filter="recent">最近一年</button>
+              </div>
+
+              <label class="select-field">
+                <span>年份</span>
+                <select id="yearSelect">
+                  <option value="all">全部年份</option>
+                </select>
+              </label>
+
+              <label class="select-field">
+                <span>排序</span>
+                <select id="sortSelect">
+                  <option value="relevance">最相關</option>
+                  <option value="newest">最新演唱</option>
+                  <option value="oldest">最早演唱</option>
+                  <option value="song">歌曲 A-Z</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="stat-strip" aria-label="資料總覽">
+            <div>
+              <strong id="statSongs">-</strong>
+              <span>首演唱紀錄</span>
+            </div>
+            <div>
+              <strong id="statStreams">-</strong>
+              <span>場公開直播</span>
+            </div>
+            <div>
+              <strong id="statArtists">-</strong>
+              <span>位歌手</span>
+            </div>
+            <div>
+              <strong id="statRange">-</strong>
+              <span>收錄年份</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="daily-pick" aria-labelledby="dailyPickHeading">
+          <div class="daily-art" id="dailyThumb" aria-hidden="true"></div>
+          <div class="daily-copy">
+            <p class="section-kicker">Random Pick</p>
+            <h2 id="dailyPickHeading">隨選一首</h2>
+            <p id="dailyTitle" class="daily-title">載入中</p>
+            <p id="dailyMeta" class="daily-meta">正在從歌單資料隨機挑選曲目。</p>
+            <div class="daily-actions">
+              <a id="dailyOpen" class="play-link" href="#" target="_blank" rel="noreferrer">播放</a>
+              <button id="dailyRefresh" class="copy-button refresh-button" type="button">換一首</button>
+              <button id="dailyVersions" class="copy-button" type="button">查看版本</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="workspace" aria-label="查詢結果">
+          <aside class="insights" aria-label="資料洞察">
+            <div class="song-ranking">
+              <p class="section-kicker">Top Songs</p>
+              <h2>歌曲 Top 20</h2>
+              <div id="songRanking" class="ranking-list"></div>
+            </div>
+
+            <div class="artist-cloud">
+              <p class="section-kicker">Top Artists</p>
+              <div id="artistCloud" class="artist-list"></div>
+            </div>
+          </aside>
+
+          <section class="results-area" aria-labelledby="resultsHeading">
+            <div class="results-head">
+              <div>
+                <p class="section-kicker">Results</p>
+                <h2 id="resultsHeading">搜尋結果</h2>
+              </div>
+              <p id="resultCount" class="result-count">-</p>
+            </div>
+
+            <div id="statusMessage" class="status-message" role="status"></div>
+            <div id="resultsList" class="results-list"></div>
+
+            <div class="load-more-wrap">
+              <button id="loadMore" type="button">載入更多</button>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <footer class="site-footer" aria-label="網站資訊">
+        <div>
+          <p class="section-kicker">Credits</p>
+          <p class="footer-title">網站製作：Boss</p>
+          <p>本網站為粉絲製作的非官方歌單查詢工具，與 ACGlive / 綾音Ring 官方無關。</p>
+        </div>
+        <div>
+          <p class="section-kicker">Sources</p>
+          <p id="sourceThanks">資料來源感謝：讀取中</p>
+          <p id="dataUpdated">資料更新：-</p>
+        </div>
+      </footer>
+    </div>
+
+    <div id="versionsOverlay" class="versions-overlay" hidden>
+      <section class="versions-panel" role="dialog" aria-modal="true" aria-labelledby="versionsTitle">
+        <button class="versions-close" type="button" data-close-versions aria-label="關閉版本列表">×</button>
+        <p class="section-kicker">All Versions</p>
+        <h2 id="versionsTitle">歌曲版本</h2>
+        <p id="versionsMeta" class="versions-meta"></p>
+        <div id="versionsList" class="versions-list"></div>
+      </section>
+    </div>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>
