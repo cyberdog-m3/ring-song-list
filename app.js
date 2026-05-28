@@ -461,13 +461,17 @@ function buildMemeHighlights(songs) {
       item.likeCount = item.metrics?.likeCount || 0;
       item.commentSampleCount = item.metrics?.commentSampleCount || 0;
       item.engagementRate = item.viewCount > 0 ? item.likeCount / item.viewCount : 0;
-      item.score = item.spCount * 14
-        + item.segments.length * 9
-        + Math.min(18, Math.round(item.density * 80))
-        + Math.log10(item.viewCount + 1) * 7
-        + Math.log10(item.likeCount + 1) * 12
-        + Math.log10(item.commentSampleCount + 1) * 6
-        + Math.min(16, item.engagementRate * 160)
+      const commentSignal = Math.min(72, item.commentSampleCount * 4)
+        + Math.log10(item.commentSampleCount + 1) * 24;
+      const spSignal = item.spCount * 12
+        + item.segments.length * 7
+        + Math.min(16, Math.round(item.density * 70));
+      const audienceSignal = Math.log10(item.viewCount + 1) * 4
+        + Math.log10(item.likeCount + 1) * 6
+        + Math.min(10, item.engagementRate * 100);
+      item.score = commentSignal
+        + spSignal
+        + audienceSignal
         + Math.max(0, (item.date?.getFullYear() || 2022) - 2022);
       return item;
     })
