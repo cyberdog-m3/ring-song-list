@@ -1,7 +1,6 @@
 const CSV_URL = "./data/songs.csv";
 const PAGE_SIZE = 40;
-const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-const SITE_CREATOR = "Boss";
+const MEME_SEGMENT_PATTERN = /Yee|PON|翻|奪權|傘電|借你|小火龍|peko|耳膜|大福|紅包|高清清唱|The釣|練舞功|主播登場|好油|喵/i;
 
 const state = {
   songs: [],
@@ -32,6 +31,7 @@ const elements = {
   loadMore: document.querySelector("#loadMore"),
   songRanking: document.querySelector("#songRanking"),
   artistCloud: document.querySelector("#artistCloud"),
+  memeHighlights: document.querySelector("#memeHighlights"),
   dailyThumb: document.querySelector("#dailyThumb"),
   dailyTitle: document.querySelector("#dailyTitle"),
   dailyMeta: document.querySelector("#dailyMeta"),
@@ -63,6 +63,7 @@ async function init() {
     renderSongRanking(state.songs);
     renderArtistCloud(state.songs);
     initRandomPick(state.songs);
+    renderMemeHighlights(state.songs);
     renderDataCredits(state.songs);
     applyFilters();
   } catch (error) {
@@ -138,6 +139,19 @@ function bindEvents() {
       const song = state.songs.find((entry) => entry.versionKey === versionsButton.dataset.versionKey);
       if (song) openVersionsForSong(song);
     }
+  });
+
+  elements.memeHighlights?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-meme-title]");
+    if (!button) return;
+
+    state.filter = "sp";
+    state.query = button.dataset.memeTitle || "";
+    state.visibleCount = PAGE_SIZE;
+    elements.searchInput.value = state.query;
+    elements.chips.forEach((chip) => chip.classList.toggle("is-active", chip.dataset.filter === "sp"));
+    applyFilters();
+    document.querySelector("#resultsHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   elements.versionsOverlay.addEventListener("click", async (event) => {
@@ -372,6 +386,101 @@ function renderSongRanking(songs) {
   });
 }
 
+function renderMemeHighlights(songs) {
+  if (!elements.memeHighlights) return;
+
+  const highlights = buildMemeHighlights(songs).slice(0, 5);
+  if (!highlights.length) {
+    elements.memeHighlights.innerHTML = '<p class="meme-empty">目前還沒有可顯示的 SP 片段。</p>';
+    return;
+  }
+
+  elements.memeHighlights.innerHTML = highlights.map(renderMemeHighlight).join("");
+}
+
+function buildMemeHighlights(songs) {
+  const songCounts = new Map();
+  for (const song of songs) {
+    if (song.entryType !== "song") continue;
+    songCounts.set(song.video_id, (songCounts.get(song.video_id) || 0) + 1);
+  }
+
+  const byVideo = new Map();
+  for (const song of songs) {
+    if (!isMemeSegment(song)) continue;
+
+    const current = byVideo.get(song.video_id) || {
+      videoId: song.video_id,
+      videoTitle: song.video_title,
+      streamDate: song.stream_date,
+      date: song.date,
+      segments: [],
+      spCount: 0,
+      songCount: songCounts.get(song.video_id) || 0,
+    };
+
+    current.segments.push(song);
+    if (song.category === "SP") current.spCount += 1;
+    if (song.stream_date > current.streamDate) current.streamDate = song.stream_date;
+    byVideo.set(song.video_id, current);
+  }
+
+  return [...byVideo.values()]
+    .map((item) => {
+      item.segments.sort((a, b) => a.seconds - b.seconds);
+      item.feature = item.segments.find((segment) => segment.category === "SP") || item.segments[0];
+      item.density = item.segments.length / Math.max(1, item.songCount);
+      item.score = item.spCount * 14
+        + item.segments.length * 9
+        + Math.min(18, Math.round(item.density * 80))
+        + Math.max(0, (item.date?.getFullYear() || 2022) - 2022);
+      return item;
+    })
+    .sort((a, b) => b.score - a.score || compareDateDesc(a, b) || a.videoTitle.localeCompare(b.videoTitle, "zh-Hant"))
+    .map((item, index) => ({
+      ...item,
+      heat: Math.max(58, 99 - index * 7),
+    }));
+}
+
+function isMemeSegment(song) {
+  if (song.entryType !== "category") return false;
+  if (song.category === "SP") return true;
+  return MEME_SEGMENT_PATTERN.test(`${song.song_title} ${song.raw_entry}`);
+}
+
+function renderMemeHighlight(item, index) {
+  const feature = item.feature;
+  const segments = item.segments.slice(0, 3);
+  const meta = [
+    item.streamDate,
+    `${item.segments.length} 個片段`,
+    item.spCount ? `SP ${item.spCount}` : "",
+    `SP 指數 ${item.heat}`,
+  ].filter(Boolean).join(" · ");
+
+  return `
+    <article class="meme-card ${index === 0 ? "is-featured" : ""}">
+      <a class="meme-thumb" href="${escapeAttribute(feature.youtube_url)}" target="_blank" rel="noreferrer" aria-label="播放 ${escapeAttribute(feature.song_title)}">
+        <span style="background-image:url('${thumbnailUrl(item.videoId, "hqdefault")}')"></span>
+      </a>
+      <div class="meme-card-copy">
+        <p class="meme-kicker">#${index + 1} 名場面</p>
+        <h3>${escapeHtml(feature.song_title)}</h3>
+        <p class="meme-video">${escapeHtml(item.videoTitle)}</p>
+        <p class="meme-meta">${escapeHtml(meta)}</p>
+        <ul class="meme-segments">
+          ${segments.map((segment) => `<li><span>${escapeHtml(segment.timestamp)}</span>${escapeHtml(segment.song_title)}</li>`).join("")}
+        </ul>
+        <div class="meme-actions">
+          <a class="play-link" href="${escapeAttribute(feature.youtube_url)}" target="_blank" rel="noreferrer">看片段</a>
+          <button class="copy-button" type="button" data-meme-title="${escapeAttribute(item.videoTitle)}">同場 SP</button>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
 function initRandomPick(songs) {
   state.randomPool = songs
     .filter(isSongCandidate)
@@ -493,7 +602,6 @@ function renderRankedSong(item) {
 function applyFilters() {
   const query = normalizeText(state.query);
   const tokens = query ? query.split(" ").filter(Boolean) : [];
-  const now = Date.now();
 
   let songs = state.songs.filter((song) => {
     if (state.year !== "all" && String(song.year) !== state.year) return false;
@@ -501,7 +609,6 @@ function applyFilters() {
     if (state.filter === "theme" && !song.isTheme) return false;
     if (state.filter === "schedule" && song.category !== "周表") return false;
     if (state.filter === "sp" && song.category !== "SP") return false;
-    if (state.filter === "recent" && (!song.date || now - song.date.getTime() > ONE_YEAR_MS)) return false;
     if (!tokens.length) return true;
     return tokens.every((token) => song.normalized.includes(token));
   });
