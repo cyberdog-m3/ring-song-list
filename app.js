@@ -415,7 +415,7 @@ function renderSongRanking(songs) {
 function renderMemeHighlights(songs) {
   if (!elements.memeHighlights) return;
 
-  const highlights = buildMemeHighlights(songs).slice(0, 5);
+  const highlights = buildMemeHighlights(songs).slice(0, 8);
   if (!highlights.length) {
     elements.memeHighlights.innerHTML = '<p class="meme-empty">目前還沒有可顯示的 SP 片段。</p>';
     return;
@@ -425,12 +425,6 @@ function renderMemeHighlights(songs) {
 }
 
 function buildMemeHighlights(songs) {
-  const songCounts = new Map();
-  for (const song of songs) {
-    if (song.entryType !== "song") continue;
-    songCounts.set(song.video_id, (songCounts.get(song.video_id) || 0) + 1);
-  }
-
   const byVideo = new Map();
   for (const song of songs) {
     if (!isMemeSegment(song)) continue;
@@ -443,7 +437,6 @@ function buildMemeHighlights(songs) {
       metrics: song.videoMetric || null,
       segments: [],
       spCount: 0,
-      songCount: songCounts.get(song.video_id) || 0,
     };
 
     current.segments.push(song);
@@ -456,36 +449,18 @@ function buildMemeHighlights(songs) {
     .map((item) => {
       item.segments.sort((a, b) => a.seconds - b.seconds);
       item.feature = item.segments.find((segment) => segment.category === "SP") || item.segments[0];
-      item.density = item.segments.length / Math.max(1, item.songCount);
       item.viewCount = item.metrics?.viewCount || 0;
-      item.likeCount = item.metrics?.likeCount || 0;
       item.commentSampleCount = item.metrics?.commentSampleCount || 0;
-      item.engagementRate = item.viewCount > 0 ? item.likeCount / item.viewCount : 0;
-      const commentSignal = Math.min(72, item.commentSampleCount * 4)
-        + Math.log10(item.commentSampleCount + 1) * 24;
-      const spSignal = item.spCount * 12
-        + item.segments.length * 7
-        + Math.min(16, Math.round(item.density * 70));
-      const audienceSignal = Math.log10(item.viewCount + 1) * 4
-        + Math.log10(item.likeCount + 1) * 6
-        + Math.min(10, item.engagementRate * 100);
-      item.score = commentSignal
-        + spSignal
-        + audienceSignal
-        + Math.max(0, (item.date?.getFullYear() || 2022) - 2022);
       return item;
     })
-    .sort((a, b) => b.score - a.score || compareDateDesc(a, b) || a.videoTitle.localeCompare(b.videoTitle, "zh-Hant"))
-    .map((item, index, items) => {
-      const maxScore = items[0]?.score || 0;
-      const minScore = items.at(-1)?.score || 0;
-      const spread = Math.max(1, maxScore - minScore);
-      const heat = Math.round(60 + ((item.score - minScore) / spread) * 39) - Math.min(index, 2);
-      return {
-        ...item,
-        heat: Math.min(99, Math.max(1, heat)),
-      };
-    });
+    .sort((a, b) => (
+      b.commentSampleCount - a.commentSampleCount
+      || b.spCount - a.spCount
+      || b.segments.length - a.segments.length
+      || b.viewCount - a.viewCount
+      || compareDateDesc(a, b)
+      || a.videoTitle.localeCompare(b.videoTitle, "zh-Hant")
+    ));
 }
 
 function isMemeSegment(song) {
@@ -496,36 +471,22 @@ function isMemeSegment(song) {
 
 function renderMemeHighlight(item, index) {
   const feature = item.feature;
-  const segments = item.segments.slice(0, 3);
   const meta = [
-    item.streamDate,
-    `${item.segments.length} 個片段`,
+    item.commentSampleCount ? `留言樣本 ${formatCompactNumber(item.commentSampleCount)}` : "留言樣本 0",
     item.spCount ? `SP ${item.spCount}` : "",
-    item.viewCount ? `觀看 ${formatCompactNumber(item.viewCount)}` : "",
-    item.likeCount ? `喜歡 ${formatCompactNumber(item.likeCount)}` : "",
-    item.commentSampleCount ? `留言樣本 ${formatCompactNumber(item.commentSampleCount)}` : "",
-    `SP 指數 ${item.heat}`,
+    `${item.segments.length} 個片段`,
+    item.streamDate,
   ].filter(Boolean).join(" · ");
 
   return `
-    <article class="meme-card ${index === 0 ? "is-featured" : ""}">
-      <a class="meme-thumb" href="${escapeAttribute(feature.youtube_url)}" target="_blank" rel="noreferrer" aria-label="播放 ${escapeAttribute(feature.song_title)}">
-        <span style="background-image:url('${thumbnailUrl(item.videoId, "hqdefault")}')"></span>
-      </a>
-      <div class="meme-card-copy">
-        <p class="meme-kicker">#${index + 1} 名場面</p>
-        <h3>${escapeHtml(feature.song_title)}</h3>
-        <p class="meme-video">${escapeHtml(item.videoTitle)}</p>
-        <p class="meme-meta">${escapeHtml(meta)}</p>
-        <ul class="meme-segments">
-          ${segments.map((segment) => `<li><span>${escapeHtml(segment.timestamp)}</span>${escapeHtml(segment.song_title)}</li>`).join("")}
-        </ul>
-        <div class="meme-actions">
-          <a class="play-link" href="${escapeAttribute(feature.youtube_url)}" target="_blank" rel="noreferrer">看片段</a>
-          <button class="copy-button" type="button" data-meme-title="${escapeAttribute(item.videoTitle)}">同場 SP</button>
-        </div>
-      </div>
-    </article>
+    <button class="meme-item" type="button" data-meme-title="${escapeAttribute(item.videoTitle)}">
+      <span class="rank-number">${index + 1}</span>
+      <span class="meme-item-main">
+        <strong>${escapeHtml(feature.song_title)}</strong>
+        <small>${escapeHtml(meta)}</small>
+      </span>
+      <span class="meme-comment-count">${formatCompactNumber(item.commentSampleCount)}</span>
+    </button>
   `;
 }
 
