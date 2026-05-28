@@ -37,6 +37,7 @@ const elements = {
   resultsList: document.querySelector("#resultsList"),
   loadMore: document.querySelector("#loadMore"),
   songRanking: document.querySelector("#songRanking"),
+  themeList: document.querySelector("#themeList"),
   artistCloud: document.querySelector("#artistCloud"),
   memeHighlights: document.querySelector("#memeHighlights"),
   dailyThumb: document.querySelector("#dailyThumb"),
@@ -75,6 +76,7 @@ async function init() {
     renderStats(state.songs);
     renderQuickSearches();
     renderSongRanking(state.songs);
+    renderThemeList(state.videos);
     renderArtistCloud(state.songs);
     initRandomPick(state.songs);
     renderMemeHighlights(state.songs, state.videos);
@@ -174,6 +176,17 @@ function bindEvents() {
     setSearch(button.dataset.memeQuery || "", button.dataset.memeFilter || "all", { scrollResults: true });
   });
 
+  elements.themeList?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-theme-query]");
+    if (!button) return;
+
+    setSearch(button.dataset.themeQuery || "", "theme", {
+      displayQuery: button.dataset.themeLabel || "",
+      focusSearch: true,
+      scrollResults: true,
+    });
+  });
+
   elements.versionsOverlay.addEventListener("click", async (event) => {
     if (event.target === elements.versionsOverlay || event.target.closest("[data-close-versions]")) {
       closeVersions();
@@ -195,7 +208,7 @@ function setSearch(query, filter = "all", options = {}) {
   state.filter = filter;
   state.query = query.trim();
   state.visibleCount = PAGE_SIZE;
-  elements.searchInput.value = state.query;
+  elements.searchInput.value = options.displayQuery ?? state.query;
   elements.chips.forEach((chip) => chip.classList.toggle("is-active", chip.dataset.filter === state.filter));
   applyFilters();
 
@@ -267,6 +280,8 @@ function enrichVideo(video) {
     likeCount: numberField(video.like_count),
     commentSampleCount: numberField(video.comment_sample_count),
     durationSeconds: numberField(video.duration_seconds),
+    songCount: numberField(video.song_count),
+    categoryCount: numberField(video.category_count),
     publishedAt: video.published_at || "",
   };
 }
@@ -303,8 +318,8 @@ function enrichSong(song, videoMetrics) {
     titleNormalized: normalizeText(song.song_title),
     artistNormalized: normalizeText([song.artist, canonicalArtist, artistSearchText].join(" ")),
     videoNormalized: normalizeText(song.video_title),
-    isSleep: /伴睡|睡眠|陪你睡|深夜/i.test(song.video_title),
-    isTheme: !/伴睡|睡眠|陪你睡/i.test(song.video_title),
+    isSleep: isSleepStreamTitle(song.video_title),
+    isTheme: !isSleepStreamTitle(song.video_title),
   };
 
   enriched.groupKey = songGroupKey(enriched);
@@ -365,7 +380,7 @@ function populateYearSelect(songs) {
 function renderStats(songs) {
   const songEntries = songs.filter((song) => song.entryType === "song");
   const streams = new Set(songs.map((song) => song.video_id));
-  const artists = new Set(songEntries.map((song) => song.canonicalArtist).filter(Boolean));
+  const artists = new Set(songEntries.map((song) => song.canonicalArtist).filter((artist) => artist && artist !== FALLBACK_ARTIST_LABEL));
   const dates = songs.map((song) => song.stream_date).filter(Boolean).sort();
 
   elements.statSongs.textContent = formatNumber(songEntries.length);
@@ -388,7 +403,7 @@ function renderArtistCloud(songs) {
   for (const song of songs) {
     if (song.entryType !== "song") continue;
     const artist = song.canonicalArtist;
-    if (!artist) continue;
+    if (!artist || artist === FALLBACK_ARTIST_LABEL) continue;
     counts.set(artist, (counts.get(artist) || 0) + 1);
   }
 
@@ -413,7 +428,7 @@ function renderSongRanking(songs) {
   const counts = new Map();
   for (const song of songs) {
     if (!isSongCandidate(song)) continue;
-    if (!song.canonicalArtist) continue;
+    if (!song.canonicalArtist || song.canonicalArtist === FALLBACK_ARTIST_LABEL) continue;
     const title = song.song_title.trim();
     if (!title) continue;
     const key = normalizeText(title);
@@ -442,6 +457,56 @@ function renderSongRanking(songs) {
       setSearch(button.dataset.songQuery || "", "all", { focusSearch: true });
     });
   });
+}
+
+function renderThemeList(videos) {
+  if (!elements.themeList) return;
+
+  const themes = videos
+    .filter(isThemeVideo)
+    .sort(compareVideoDesc)
+    .slice(0, 12);
+
+  if (!themes.length) {
+    elements.themeList.innerHTML = '<p class="theme-empty">目前還沒有可顯示的主題歌回。</p>';
+    return;
+  }
+
+  elements.themeList.innerHTML = themes.map(renderThemeItem).join("");
+}
+
+function isThemeVideo(video) {
+  return !String(video.status || "").startsWith("skipped_")
+    && video.video_id
+    && video.video_title
+    && !isSleepStreamTitle(video.video_title)
+    && (video.songCount > 0 || video.categoryCount > 0);
+}
+
+function renderThemeItem(video, index) {
+  const label = themeTitle(video.video_title);
+  const meta = [
+    video.stream_date,
+    video.songCount ? `${video.songCount} 首` : "",
+    video.categoryCount ? `${video.categoryCount} 個片段` : "",
+  ].filter(Boolean).join(" · ");
+
+  return `
+    <button class="theme-item" type="button" data-theme-query="${escapeAttribute(video.video_title)}" data-theme-label="${escapeAttribute(label)}">
+      <span class="rank-number">${index + 1}</span>
+      <span class="theme-item-main">
+        <strong>${escapeHtml(label)}</strong>
+        <small>${escapeHtml(meta)}</small>
+      </span>
+    </button>
+  `;
+}
+
+function themeTitle(videoTitle) {
+  const title = String(videoTitle || "").trim();
+  const withoutLead = title.replace(/^【[^】]+】\s*/, "");
+  const withoutMeta = withoutLead.split("【")[0].replace(/\s*#.*$/, "").trim();
+  return withoutMeta || title;
 }
 
 function renderMemeHighlights(songs, videos) {
@@ -533,7 +598,7 @@ function renderMemeHighlight(item, index) {
 
 function initRandomPick(songs) {
   state.randomPool = songs
-    .filter(isSongCandidate)
+    .filter((song) => isSongCandidate(song) && song.canonicalArtist !== FALLBACK_ARTIST_LABEL)
     .sort((a, b) => a.song_title.localeCompare(b.song_title, "zh-Hant") || a.video_id.localeCompare(b.video_id) || a.seconds - b.seconds);
 
   renderRandomPick();
@@ -672,7 +737,7 @@ function applyFilters() {
     if (state.filter === "sleep" && !song.isSleep) return false;
     if (state.filter === "theme" && !song.isTheme) return false;
     if (state.filter === "schedule" && song.category !== "周表") return false;
-    if (state.filter === "sp" && song.category !== "SP") return false;
+    if (state.filter === "sp" && song.category !== "SP" && song.canonicalArtist !== FALLBACK_ARTIST_LABEL) return false;
     if (!tokens.length) return true;
     return tokens.every((token) => song.normalized.includes(token));
   });
@@ -713,6 +778,11 @@ function sortSongs(a, b) {
 
 function compareDateDesc(a, b) {
   return (b.date?.getTime() || 0) - (a.date?.getTime() || 0);
+}
+
+function compareVideoDesc(a, b) {
+  return (new Date(`${b.stream_date || ""}T00:00:00`).getTime() || 0)
+    - (new Date(`${a.stream_date || ""}T00:00:00`).getTime() || 0);
 }
 
 function compareDateAsc(a, b) {
@@ -887,6 +957,10 @@ async function copyUrl(button) {
 
 function displayArtist(song) {
   return song.canonicalArtist || FALLBACK_ARTIST_LABEL;
+}
+
+function isSleepStreamTitle(title) {
+  return /伴睡|睡眠|陪你睡|深夜/i.test(String(title || ""));
 }
 
 function setStatus(message, isError = false) {

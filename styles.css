@@ -611,7 +611,18 @@ a {
   margin-top: 14px;
 }
 
+.theme-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+}
+
 .meme-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.theme-empty {
   margin: 0;
   color: var(--muted);
 }
@@ -644,19 +655,59 @@ a {
   transform: translateY(-1px);
 }
 
+.theme-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid rgba(255, 248, 239, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 248, 239, 0.045);
+  color: var(--text);
+  cursor: pointer;
+  padding: 8px 10px;
+  text-align: left;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.theme-item:hover,
+.theme-item:focus-visible {
+  border-color: rgba(127, 214, 198, 0.48);
+  background: rgba(127, 214, 198, 0.1);
+  outline: none;
+  transform: translateY(-1px);
+}
+
 .meme-item-main {
   display: grid;
   min-width: 0;
 }
 
+.theme-item-main {
+  display: grid;
+  min-width: 0;
+}
+
 .meme-item-main strong,
-.meme-item-main small {
+.meme-item-main small,
+.theme-item-main strong,
+.theme-item-main small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .meme-item-main small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.theme-item-main small {
   color: var(--muted);
   font-size: 12px;
 }
@@ -677,6 +728,7 @@ a {
 }
 
 .song-ranking,
+.theme-streams,
 .meme-ranking,
 .artist-cloud {
   border: 1px solid var(--line);
@@ -691,6 +743,7 @@ a {
 }
 
 .song-ranking h2,
+.theme-streams h2,
 .meme-ranking h2 {
   margin: 4px 0 14px;
   font-size: 24px;
