@@ -338,6 +338,10 @@ function canonicalizeArtist(artist) {
   const value = String(artist || "").trim();
   if (!value) return "";
   const normalized = normalizeText(value);
+  const unlabeledArtistValues = new Set(["未標註歌手", "未標註", "未知", "unknown", "n/a", "na", "-"]);
+  if (unlabeledArtistValues.has(normalized)) {
+    return "";
+  }
   if (normalized === normalizeText("周杰倫 Jay Chou") || normalized === normalizeText("Jay Chou")) {
     return "周杰倫";
   }
