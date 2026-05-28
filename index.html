@@ -24,8 +24,10 @@
           </span>
         </a>
         <nav class="topbar-actions" aria-label="外部連結">
+          <a href="#search">搜尋</a>
+          <a href="#starter">入坑</a>
+          <a href="#resultsHeading">結果</a>
           <a href="https://www.youtube.com/@ring77-acglive" target="_blank" rel="noreferrer">YouTube</a>
-          <a href="https://twitter.com/ACG_Ring" target="_blank" rel="noreferrer">Twitter</a>
           <a href="https://shopee.tw/nij5a6crty" target="_blank" rel="noreferrer">官方周邊</a>
         </nav>
       </header>
@@ -35,7 +37,13 @@
           <div class="hero-copy">
             <p class="eyebrow">ACGlive Singing Stream Index</p>
             <h1 id="page-title"><span>綾音Ring</span><span>歌回索引</span></h1>
-            <p class="hero-subtitle">把公開歌回中的曲目、歌手與時間軸整理成可搜尋的資料庫，想聽哪一首就直接跳到那一刻。</p>
+            <p class="hero-subtitle">想先認識綾音Ring，或回頭補某一首歌？這裡把公開歌回的曲目、歌手與時間軸整理成可搜尋索引，點下去會回到原 YouTube 直播。</p>
+            <p class="site-note">非官方粉絲整理，不代表 ACGlive / 綾音Ring 官方。資料主要參考公開時間軸留言。</p>
+            <div class="hero-actions">
+              <a class="play-link" href="#search">開始搜尋</a>
+              <a class="copy-button" href="#starter">先聽推薦</a>
+              <a class="copy-button" href="https://www.youtube.com/@ring77-acglive" target="_blank" rel="noreferrer">訂閱頻道</a>
+            </div>
           </div>
 
           <div class="hero-visual" aria-hidden="true">
@@ -50,21 +58,28 @@
           </div>
         </section>
 
+        <section class="trust-ribbon" aria-label="資料與網站狀態">
+          <p>非官方粉絲站</p>
+          <p id="dataCoverage">資料涵蓋讀取中</p>
+          <p id="trustUpdated">最後更新：-</p>
+          <a id="feedbackLink" href="mailto:cyberdodog@gmail.com">回報資料錯誤</a>
+        </section>
+
         <section class="support-strip" aria-labelledby="supportHeading">
           <div>
             <p class="section-kicker">回到原直播</p>
-            <h2 id="supportHeading">找到喜歡的歌，就順手回去補個支持。</h2>
+            <h2 id="supportHeading">聽到喜歡的片段，就回原影片留個支持。</h2>
           </div>
           <p>
-            點進片段聽完，記得幫原影片按讚、訂閱頻道；想帶點實體紀念，也可以逛官方周邊。
+            這個網站只負責幫你找到時間點。真正的觀看、按讚、留言、分享與訂閱，都請回到 YouTube 原直播。
           </p>
           <div class="support-actions">
-            <a class="play-link" href="https://www.youtube.com/@ring77-acglive" target="_blank" rel="noreferrer">訂閱頻道</a>
-            <a class="copy-button" href="https://shopee.tw/nij5a6crty" target="_blank" rel="noreferrer">官方周邊</a>
+            <a class="play-link" href="https://www.youtube.com/@ring77-acglive" target="_blank" rel="noreferrer">回 YouTube 訂閱</a>
+            <a class="copy-button" href="https://shopee.tw/nij5a6crty" target="_blank" rel="noreferrer">官方周邊 Shopee</a>
           </div>
         </section>
 
-        <section class="search-stage" aria-label="歌曲搜尋">
+        <section id="search" class="search-stage" aria-label="歌曲搜尋">
           <div class="search-panel">
             <label class="search-label" for="searchInput">搜尋</label>
             <div class="search-box">
@@ -72,10 +87,11 @@
                 id="searchInput"
                 type="search"
                 autocomplete="off"
-                placeholder="輸入歌曲、歌手或直播標題"
+                placeholder="輸入歌名、歌手或直播標題，例如：晴天、周杰倫、伴睡"
               />
               <button id="clearSearch" type="button">清除</button>
             </div>
+            <div id="quickSearches" class="quick-searches" aria-label="快速搜尋"></div>
 
             <div class="controls" aria-label="篩選與排序">
               <div class="chip-group" role="group" aria-label="快速篩選">
@@ -123,6 +139,16 @@
               <span>收錄年份</span>
             </div>
           </div>
+
+          <div id="dataHealth" class="data-health" aria-live="polite"></div>
+        </section>
+
+        <section id="starter" class="starter-guide" aria-labelledby="starterHeading">
+          <div class="section-head">
+            <p class="section-kicker">Start Here</p>
+            <h2 id="starterHeading">不知道先聽哪裡，可以從這幾段開始。</h2>
+          </div>
+          <div id="starterCards" class="starter-cards" aria-live="polite"></div>
         </section>
 
         <section class="daily-pick" aria-labelledby="dailyPickHeading">
@@ -145,12 +171,14 @@
             <div class="song-ranking">
               <p class="section-kicker">Top Songs</p>
               <h2>歌曲 Top 20</h2>
+              <p class="panel-note">依目前收錄歌名統計，含未標註歌手資料。</p>
               <div id="songRanking" class="ranking-list"></div>
             </div>
 
             <div class="meme-ranking">
-              <p class="section-kicker">Top Comments</p>
-              <h2>迷因熱點</h2>
+              <p class="section-kicker">Top Samples</p>
+              <h2>留言熱點</h2>
+              <p class="panel-note">依抓到的公開留言樣本數排序，不等於 YouTube 完整留言總數。</p>
               <div id="memeHighlights" class="meme-list" aria-live="polite"></div>
             </div>
 
@@ -202,7 +230,7 @@
     <div id="versionsOverlay" class="versions-overlay" hidden>
       <section class="versions-panel" role="dialog" aria-modal="true" aria-labelledby="versionsTitle">
         <button class="versions-close" type="button" data-close-versions aria-label="關閉版本列表">×</button>
-        <p class="section-kicker">All Versions</p>
+        <p id="versionsKicker" class="section-kicker">All Versions</p>
         <h2 id="versionsTitle">歌曲版本</h2>
         <p id="versionsMeta" class="versions-meta"></p>
         <div id="versionsList" class="versions-list"></div>

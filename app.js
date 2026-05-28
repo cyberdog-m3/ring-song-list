@@ -24,10 +24,15 @@ const elements = {
   yearSelect: document.querySelector("#yearSelect"),
   sortSelect: document.querySelector("#sortSelect"),
   chips: [...document.querySelectorAll(".chip")],
+  quickSearches: document.querySelector("#quickSearches"),
   statSongs: document.querySelector("#statSongs"),
   statStreams: document.querySelector("#statStreams"),
   statArtists: document.querySelector("#statArtists"),
   statRange: document.querySelector("#statRange"),
+  dataHealth: document.querySelector("#dataHealth"),
+  dataCoverage: document.querySelector("#dataCoverage"),
+  trustUpdated: document.querySelector("#trustUpdated"),
+  feedbackLink: document.querySelector("#feedbackLink"),
   resultCount: document.querySelector("#resultCount"),
   statusMessage: document.querySelector("#statusMessage"),
   resultsList: document.querySelector("#resultsList"),
@@ -35,6 +40,7 @@ const elements = {
   songRanking: document.querySelector("#songRanking"),
   artistCloud: document.querySelector("#artistCloud"),
   memeHighlights: document.querySelector("#memeHighlights"),
+  starterCards: document.querySelector("#starterCards"),
   dailyThumb: document.querySelector("#dailyThumb"),
   dailyTitle: document.querySelector("#dailyTitle"),
   dailyMeta: document.querySelector("#dailyMeta"),
@@ -44,6 +50,7 @@ const elements = {
   sourceThanks: document.querySelector("#sourceThanks"),
   dataUpdated: document.querySelector("#dataUpdated"),
   versionsOverlay: document.querySelector("#versionsOverlay"),
+  versionsKicker: document.querySelector("#versionsKicker"),
   versionsTitle: document.querySelector("#versionsTitle"),
   versionsMeta: document.querySelector("#versionsMeta"),
   versionsList: document.querySelector("#versionsList"),
@@ -67,9 +74,11 @@ async function init() {
     state.songGroups = buildSongGroups(state.songs);
 
     populateYearSelect(state.songs);
-    renderStats(state.songs);
+    renderStats(state.songs, state.videos);
+    renderQuickSearches(state.songs);
     renderSongRanking(state.songs);
     renderArtistCloud(state.songs);
+    renderStarterGuide(state.songs, state.videos);
     initRandomPick(state.songs);
     renderMemeHighlights(state.songs, state.videos);
     renderDataCredits(state.songs);
@@ -146,20 +155,39 @@ function bindEvents() {
     if (versionsButton) {
       const song = state.songs.find((entry) => entry.versionKey === versionsButton.dataset.versionKey);
       if (song) openVersionsForSong(song);
+      return;
     }
+
+    const timelineButton = event.target.closest("[data-video-timeline]");
+    if (timelineButton) {
+      openTimelineForVideo(timelineButton.dataset.videoTimeline, timelineButton.dataset.currentSong || "");
+    }
+  });
+
+  elements.quickSearches?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-quick-query]");
+    if (!button) return;
+    setSearch(button.dataset.quickQuery || "", button.dataset.quickFilter || "all", { focusSearch: true });
+  });
+
+  elements.starterCards?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-starter-query], [data-starter-version-key]");
+    if (!button) return;
+
+    if (button.dataset.starterVersionKey) {
+      const song = state.songs.find((entry) => entry.versionKey === button.dataset.starterVersionKey);
+      if (song) openVersionsForSong(song);
+      return;
+    }
+
+    setSearch(button.dataset.starterQuery || "", button.dataset.starterFilter || "all", { scrollResults: true });
   });
 
   elements.memeHighlights?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-meme-query]");
     if (!button) return;
 
-    state.filter = button.dataset.memeFilter || "all";
-    state.query = button.dataset.memeQuery || "";
-    state.visibleCount = PAGE_SIZE;
-    elements.searchInput.value = state.query;
-    elements.chips.forEach((chip) => chip.classList.toggle("is-active", chip.dataset.filter === state.filter));
-    applyFilters();
-    document.querySelector("#resultsHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setSearch(button.dataset.memeQuery || "", button.dataset.memeFilter || "all", { scrollResults: true });
   });
 
   elements.versionsOverlay.addEventListener("click", async (event) => {
@@ -177,6 +205,20 @@ function bindEvents() {
       closeVersions();
     }
   });
+}
+
+function setSearch(query, filter = "all", options = {}) {
+  state.filter = filter;
+  state.query = query.trim();
+  state.visibleCount = PAGE_SIZE;
+  elements.searchInput.value = state.query;
+  elements.chips.forEach((chip) => chip.classList.toggle("is-active", chip.dataset.filter === state.filter));
+  applyFilters();
+
+  if (options.focusSearch) elements.searchInput.focus();
+  if (options.scrollResults) {
+    document.querySelector("#resultsHeading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 async function fetchCsv(url) {
@@ -332,16 +374,68 @@ function populateYearSelect(songs) {
   elements.yearSelect.innerHTML = options.join("");
 }
 
-function renderStats(songs) {
+function renderStats(songs, videos) {
   const songEntries = songs.filter((song) => song.entryType === "song");
   const streams = new Set(songs.map((song) => song.video_id));
   const artists = new Set(songEntries.map((song) => song.canonicalArtist).filter(Boolean));
   const dates = songs.map((song) => song.stream_date).filter(Boolean).sort();
+  const publicVideos = videos.filter((video) => !String(video.status || "").startsWith("skipped_"));
+  const memberOnlyVideos = videos.filter((video) => video.status === "skipped_member_only");
+  const pinnedSources = publicVideos.filter((video) => String(video.selected_comment_is_pinned).toLowerCase() === "true");
+  const missingArtists = songEntries.filter((song) => !song.canonicalArtist).length;
+  const missingDates = songs.filter((song) => !song.stream_date).length;
 
   elements.statSongs.textContent = formatNumber(songEntries.length);
   elements.statStreams.textContent = formatNumber(streams.size);
   elements.statArtists.textContent = formatNumber(artists.size);
   elements.statRange.textContent = dates.length ? `${dates[0].slice(0, 4)}-${dates.at(-1).slice(0, 4)}` : "-";
+
+  if (elements.dataCoverage) {
+    elements.dataCoverage.textContent = `收錄 ${formatNumber(publicVideos.length)}/${formatNumber(videos.length)} 支公開可解析影片`;
+  }
+
+  if (elements.dataHealth) {
+    elements.dataHealth.innerHTML = [
+      `<span>公開可解析 ${formatNumber(publicVideos.length)} 支</span>`,
+      `<span>會員限定未解析 ${formatNumber(memberOnlyVideos.length)} 支</span>`,
+      `<span>置頂時間軸 ${formatNumber(pinnedSources.length)} 支</span>`,
+      `<span>未標註歌手 ${formatNumber(missingArtists)} 筆</span>`,
+      missingDates ? `<span>缺日期 ${formatNumber(missingDates)} 筆</span>` : "",
+      "<span>觀看/按讚/留言樣本為抓取當下數值</span>",
+    ].filter(Boolean).join("");
+  }
+}
+
+function renderQuickSearches(songs) {
+  if (!elements.quickSearches) return;
+
+  const artistCounts = new Map();
+  const songCounts = new Map();
+  for (const song of songs) {
+    if (!isSongCandidate(song)) continue;
+    if (song.canonicalArtist) artistCounts.set(song.canonicalArtist, (artistCounts.get(song.canonicalArtist) || 0) + 1);
+    songCounts.set(song.song_title, (songCounts.get(song.song_title) || 0) + 1);
+  }
+
+  const artists = [...artistCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"))
+    .slice(0, 4)
+    .map(([label]) => ({ label, filter: "all" }));
+  const songsTop = [...songCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"))
+    .slice(0, 3)
+    .map(([label]) => ({ label, filter: "all" }));
+  const fixed = [
+    { label: "伴睡", filter: "sleep" },
+    { label: "SP", filter: "sp" },
+  ];
+
+  elements.quickSearches.innerHTML = [
+    '<span>快速找：</span>',
+    ...fixed.concat(artists, songsTop).map((item) => (
+      `<button type="button" data-quick-query="${escapeAttribute(item.filter === "all" ? item.label : "")}" data-quick-filter="${escapeAttribute(item.filter)}">${escapeHtml(item.label)}</button>`
+    )),
+  ].join("");
 }
 
 function renderArtistCloud(songs) {
@@ -365,11 +459,7 @@ function renderArtistCloud(songs) {
 
   elements.artistCloud.querySelectorAll("[data-artist]").forEach((button) => {
     button.addEventListener("click", () => {
-      elements.searchInput.value = button.dataset.artist || "";
-      state.query = elements.searchInput.value;
-      state.visibleCount = PAGE_SIZE;
-      applyFilters();
-      elements.searchInput.focus();
+      setSearch(button.dataset.artist || "", "all", { focusSearch: true });
     });
   });
 }
@@ -403,11 +493,7 @@ function renderSongRanking(songs) {
 
   elements.songRanking.querySelectorAll("[data-song-query]").forEach((button) => {
     button.addEventListener("click", () => {
-      elements.searchInput.value = button.dataset.songQuery || "";
-      state.query = elements.searchInput.value;
-      state.visibleCount = PAGE_SIZE;
-      applyFilters();
-      elements.searchInput.focus();
+      setSearch(button.dataset.songQuery || "", "all", { focusSearch: true });
     });
   });
 }
@@ -422,6 +508,78 @@ function renderMemeHighlights(songs, videos) {
   }
 
   elements.memeHighlights.innerHTML = highlights.map(renderMemeHighlight).join("");
+}
+
+function renderStarterGuide(songs, videos) {
+  if (!elements.starterCards) return;
+
+  const songCandidates = songs.filter(isSongCandidate);
+  const latestSong = [...songCandidates].sort(compareVersionDesc)[0];
+  const sleepSong = [...songCandidates].filter((song) => song.isSleep).sort(compareVersionDesc)[0];
+  const hotVideo = buildMemeHighlights(songs, videos)[0];
+  const spSegment = [...songs].filter((song) => song.category === "SP").sort(compareVersionDesc)[0];
+  const versionEntry = [...state.songGroups.values()]
+    .filter((versions) => versions.length > 1)
+    .sort((a, b) => b.length - a.length || compareVersionDesc(a[0], b[0]))[0]?.[0];
+
+  const cards = [
+    latestSong && {
+      kicker: "最新補檔",
+      title: latestSong.video_title,
+      meta: [latestSong.stream_date, `${getSongsByVideo(latestSong.video_id).length} 首`].filter(Boolean).join(" · "),
+      action: "看這場歌單",
+      query: latestSong.video_title,
+      filter: "all",
+    },
+    sleepSong && {
+      kicker: "伴睡入口",
+      title: sleepSong.video_title,
+      meta: [sleepSong.stream_date, displayArtist(sleepSong), sleepSong.song_title].filter(Boolean).join(" · "),
+      action: "找伴睡歌回",
+      query: sleepSong.video_title,
+      filter: "sleep",
+    },
+    hotVideo && {
+      kicker: "留言最多",
+      title: hotVideo.videoTitle,
+      meta: [`留言樣本 ${formatCompactNumber(hotVideo.commentSampleCount)}`, `歌曲 ${hotVideo.songCount}`].join(" · "),
+      action: "看同場歌曲",
+      query: hotVideo.videoTitle,
+      filter: "all",
+    },
+    spSegment && {
+      kicker: "名場面",
+      title: spSegment.song_title,
+      meta: [spSegment.stream_date, spSegment.video_title].filter(Boolean).join(" · "),
+      action: "看同場 SP",
+      query: spSegment.video_title,
+      filter: "sp",
+    },
+    versionEntry && {
+      kicker: "多版本",
+      title: versionEntry.song_title,
+      meta: `${getSongVersions(versionEntry).length} 個版本 · ${displayArtist(versionEntry)}`,
+      action: "比較版本",
+      versionKey: versionEntry.versionKey,
+    },
+  ].filter(Boolean);
+
+  elements.starterCards.innerHTML = cards.map(renderStarterCard).join("");
+}
+
+function renderStarterCard(card) {
+  const attrs = card.versionKey
+    ? `data-starter-version-key="${escapeAttribute(card.versionKey)}"`
+    : `data-starter-query="${escapeAttribute(card.query)}" data-starter-filter="${escapeAttribute(card.filter || "all")}"`;
+
+  return `
+    <button class="starter-card" type="button" ${attrs}>
+      <span>${escapeHtml(card.kicker)}</span>
+      <strong>${escapeHtml(card.title)}</strong>
+      <small>${escapeHtml(card.meta)}</small>
+      <em>${escapeHtml(card.action)}</em>
+    </button>
+  `;
 }
 
 function buildMemeHighlights(songs, videos) {
@@ -564,11 +722,20 @@ function renderDataCredits(songs) {
 
   if (!scrapedDates.length) {
     elements.dataUpdated.textContent = "資料更新：-";
+    if (elements.trustUpdated) elements.trustUpdated.textContent = "最後更新：-";
     return;
   }
 
   const latest = scrapedDates.sort((a, b) => b.getTime() - a.getTime())[0];
-  elements.dataUpdated.textContent = `資料更新：${formatDateTime(latest)}`;
+  const formatted = formatDateTime(latest);
+  elements.dataUpdated.textContent = `資料更新：${formatted}`;
+  if (elements.trustUpdated) elements.trustUpdated.textContent = `最後更新：${formatted}`;
+  if (elements.feedbackLink) {
+    elements.feedbackLink.href = feedbackMailto({
+      subject: "綾音Ring 歌回索引資料回報",
+      body: "請貼上有問題的歌名、影片標題、時間點，或描述需要修正的地方：",
+    });
+  }
 }
 
 function buildSongGroups(songs) {
@@ -595,10 +762,15 @@ function getSongVersions(song) {
   return state.songGroups.get(song.groupKey) || [song];
 }
 
+function getSongsByVideo(videoId) {
+  return state.songs
+    .filter((song) => song.video_id === videoId)
+    .sort((a, b) => a.seconds - b.seconds || a.song_order - b.song_order);
+}
+
 function isSongCandidate(song) {
   return song.entryType === "song"
     && Boolean(song.song_title.trim())
-    && Boolean(song.canonicalArtist)
     && !isLikelyNonSongSegment(song.song_title);
 }
 
@@ -697,9 +869,31 @@ function renderResults() {
 function renderSongRow(song, index) {
   const isCategory = song.entryType === "category";
   const artist = isCategory ? `分類：${song.category || "段落"}` : displayArtist(song);
-  const videoMeta = [song.stream_date, `第 ${song.song_order} 首`, song.video_title].filter(Boolean).join(" · ");
+  const video = state.videoMetrics.get(song.video_id);
+  const orderLabel = isCategory ? "片段" : `第 ${song.song_order} 首`;
+  const durationLabel = video?.durationSeconds ? `直播 ${formatDuration(video.durationSeconds)}` : "";
+  const videoMeta = [song.stream_date, orderLabel, durationLabel, song.video_title].filter(Boolean).join(" · ");
+  const sourceMeta = [
+    song.sourceAuthor ? `時間軸：${song.sourceAuthor}` : "",
+    song.source_comment_is_pinned === "true" ? "置頂留言" : "公開留言",
+    song.scraped_at ? `抓取：${formatDateOnly(song.scraped_at)}` : "",
+    song.parse_status && song.parse_status !== "ok" ? `狀態：${song.parse_status}` : "",
+  ].filter(Boolean).join(" · ");
   const delay = Math.min(index, 10) * 28;
   const versions = isCategory ? [] : getSongVersions(song);
+  const fullVideoUrl = video?.video_url || videoUrl(song.video_id);
+  const reportUrl = feedbackMailto({
+    subject: `歌單資料回報：${song.song_title || song.video_title}`,
+    body: [
+      "請描述要修正的地方：",
+      "",
+      `video_id: ${song.video_id}`,
+      `video_title: ${song.video_title}`,
+      `timestamp: ${song.timestamp}`,
+      `song_title: ${song.song_title}`,
+      `artist: ${song.artist}`,
+    ].join("\n"),
+  });
 
   return `
     <article class="song-row" style="animation-delay:${delay}ms">
@@ -712,11 +906,60 @@ function renderSongRow(song, index) {
         </div>
         <p class="song-artist">${escapeHtml(artist)}</p>
         <p class="song-video">${escapeHtml(videoMeta)}</p>
-        ${song.sourceAuthor ? `<p class="song-source">時間軸：${escapeHtml(song.sourceAuthor)}</p>` : ""}
+        <p class="song-source">${escapeHtml(sourceMeta)} · <a href="${escapeAttribute(reportUrl)}">回報錯誤</a></p>
       </div>
       <div class="song-actions">
-        <a class="play-link" href="${escapeAttribute(song.youtube_url)}" target="_blank" rel="noreferrer">${isCategory ? "前往" : "播放"}</a>
+        <a class="play-link" href="${escapeAttribute(song.youtube_url)}" target="_blank" rel="noreferrer">${isCategory ? "前往片段" : "原片段"}</a>
+        <button class="copy-button timeline-button" type="button" data-video-timeline="${escapeAttribute(song.video_id)}" data-current-song="${escapeAttribute(song.versionKey)}">同場歌單</button>
+        <a class="copy-button" href="${escapeAttribute(fullVideoUrl)}" target="_blank" rel="noreferrer">完整直播</a>
         ${!isCategory ? `<button class="copy-button version-button" type="button" data-version-key="${escapeAttribute(song.versionKey)}">${versions.length} 版</button>` : ""}
+        <button class="copy-button" type="button" data-copy-url="${escapeAttribute(song.youtube_url)}">複製</button>
+      </div>
+    </article>
+  `;
+}
+
+function openTimelineForVideo(videoId, currentVersionKey = "") {
+  const timeline = getSongsByVideo(videoId);
+  if (!timeline.length) return;
+
+  const video = state.videoMetrics.get(videoId);
+  const songCount = timeline.filter((song) => song.entryType === "song").length;
+  const categoryCount = timeline.length - songCount;
+  elements.versionsKicker.textContent = "Stream Setlist";
+  elements.versionsTitle.textContent = "直播歌單";
+  elements.versionsMeta.textContent = [
+    video?.stream_date || timeline[0]?.stream_date,
+    `${songCount} 首歌`,
+    categoryCount ? `${categoryCount} 個片段` : "",
+    video?.durationSeconds ? `直播 ${formatDuration(video.durationSeconds)}` : "",
+    video?.selected_comment_author ? `時間軸：${video.selected_comment_author}` : "",
+  ].filter(Boolean).join(" · ");
+  elements.versionsList.innerHTML = timeline.map((song) => renderTimelineRow(song, currentVersionKey)).join("");
+  elements.versionsOverlay.hidden = false;
+  document.body.classList.add("modal-open");
+  elements.versionsOverlay.querySelector("[data-close-versions]").focus();
+}
+
+function renderTimelineRow(song, currentVersionKey) {
+  const isCurrent = song.versionKey === currentVersionKey;
+  const isCategory = song.entryType === "category";
+  const source = song.sourceAuthor ? `時間軸：${song.sourceAuthor}` : "時間軸：未標註";
+  const meta = [
+    song.timestamp,
+    isCategory ? `分類：${song.category || "片段"}` : displayArtist(song),
+    source,
+  ].filter(Boolean).join(" · ");
+
+  return `
+    <article class="version-row timeline-row ${isCurrent ? "is-current" : ""}">
+      <div class="version-thumb" style="background-image:url('${thumbnailUrl(song.video_id)}')"></div>
+      <div class="version-main">
+        <p class="version-meta">${escapeHtml(meta)}</p>
+        <h3>${escapeHtml(song.song_title)}</h3>
+      </div>
+      <div class="version-actions">
+        <a class="play-link" href="${escapeAttribute(song.youtube_url)}" target="_blank" rel="noreferrer">${isCategory ? "前往" : "播放"}</a>
         <button class="copy-button" type="button" data-copy-url="${escapeAttribute(song.youtube_url)}">複製</button>
       </div>
     </article>
@@ -728,6 +971,7 @@ function openVersionsForSong(song) {
   const latestDate = versions.map((item) => item.stream_date).filter(Boolean).sort().at(-1) || "-";
   const artists = [...new Set(versions.map(displayArtist).filter(Boolean))].slice(0, 3).join("、");
 
+  elements.versionsKicker.textContent = "All Versions";
   elements.versionsTitle.textContent = song.song_title;
   elements.versionsMeta.textContent = [`共 ${versions.length} 次`, `最近 ${latestDate}`, artists].filter(Boolean).join(" · ");
   elements.versionsList.innerHTML = versions.map(renderVersionRow).join("");
@@ -742,8 +986,16 @@ function closeVersions() {
 }
 
 function renderVersionRow(song) {
+  const video = state.videoMetrics.get(song.video_id);
   const source = song.sourceAuthor ? `時間軸：${song.sourceAuthor}` : "時間軸：未標註";
-  const meta = [song.stream_date, song.timestamp, displayArtist(song), source].filter(Boolean).join(" · ");
+  const meta = [
+    song.stream_date,
+    song.timestamp,
+    displayArtist(song),
+    video?.viewCount ? `觀看 ${formatCompactNumber(video.viewCount)}` : "",
+    video?.commentSampleCount ? `留言樣本 ${formatCompactNumber(video.commentSampleCount)}` : "",
+    source,
+  ].filter(Boolean).join(" · ");
 
   return `
     <article class="version-row">
@@ -753,7 +1005,8 @@ function renderVersionRow(song) {
         <h3>${escapeHtml(song.video_title)}</h3>
       </div>
       <div class="version-actions">
-        <a class="play-link" href="${escapeAttribute(song.youtube_url)}" target="_blank" rel="noreferrer">播放</a>
+        <a class="play-link" href="${escapeAttribute(song.youtube_url)}" target="_blank" rel="noreferrer">原片段</a>
+        <a class="copy-button" href="${escapeAttribute(video?.video_url || videoUrl(song.video_id))}" target="_blank" rel="noreferrer">完整直播</a>
         <button class="copy-button" type="button" data-copy-url="${escapeAttribute(song.youtube_url)}">複製</button>
       </div>
     </article>
@@ -786,6 +1039,10 @@ function thumbnailUrl(videoId, quality = "mqdefault") {
   return `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/${quality}.jpg`;
 }
 
+function videoUrl(videoId) {
+  return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+}
+
 function formatNumber(value) {
   return new Intl.NumberFormat("zh-Hant-TW").format(value);
 }
@@ -806,6 +1063,34 @@ function formatDateTime(date) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatDateOnly(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("zh-Hant-TW", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function formatDuration(seconds) {
+  const total = Number(seconds);
+  if (!Number.isFinite(total) || total <= 0) return "";
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (hours > 0) return `${hours} 小時 ${minutes} 分`;
+  return `${minutes} 分`;
+}
+
+function feedbackMailto({ subject, body }) {
+  const params = new URLSearchParams({
+    subject,
+    body,
+  });
+  return `mailto:cyberdodog@gmail.com?${params.toString()}`;
 }
 
 function escapeHtml(value) {
