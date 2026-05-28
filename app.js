@@ -29,8 +29,6 @@ const elements = {
   statStreams: document.querySelector("#statStreams"),
   statArtists: document.querySelector("#statArtists"),
   statRange: document.querySelector("#statRange"),
-  dataHealth: document.querySelector("#dataHealth"),
-  dataCoverage: document.querySelector("#dataCoverage"),
   trustUpdated: document.querySelector("#trustUpdated"),
   feedbackLink: document.querySelector("#feedbackLink"),
   resultCount: document.querySelector("#resultCount"),
@@ -73,7 +71,7 @@ async function init() {
     state.songGroups = buildSongGroups(state.songs);
 
     populateYearSelect(state.songs);
-    renderStats(state.songs, state.videos);
+    renderStats(state.songs);
     renderQuickSearches();
     renderSongRanking(state.songs);
     renderArtistCloud(state.songs);
@@ -363,36 +361,16 @@ function populateYearSelect(songs) {
   elements.yearSelect.innerHTML = options.join("");
 }
 
-function renderStats(songs, videos) {
+function renderStats(songs) {
   const songEntries = songs.filter((song) => song.entryType === "song");
   const streams = new Set(songs.map((song) => song.video_id));
   const artists = new Set(songEntries.map((song) => song.canonicalArtist).filter(Boolean));
   const dates = songs.map((song) => song.stream_date).filter(Boolean).sort();
-  const publicVideos = videos.filter((video) => !String(video.status || "").startsWith("skipped_"));
-  const memberOnlyVideos = videos.filter((video) => video.status === "skipped_member_only");
-  const pinnedSources = publicVideos.filter((video) => String(video.selected_comment_is_pinned).toLowerCase() === "true");
-  const missingArtists = songEntries.filter((song) => !song.canonicalArtist).length;
-  const missingDates = songs.filter((song) => !song.stream_date).length;
 
   elements.statSongs.textContent = formatNumber(songEntries.length);
   elements.statStreams.textContent = formatNumber(streams.size);
   elements.statArtists.textContent = formatNumber(artists.size);
   elements.statRange.textContent = dates.length ? `${dates[0].slice(0, 4)}-${dates.at(-1).slice(0, 4)}` : "-";
-
-  if (elements.dataCoverage) {
-    elements.dataCoverage.textContent = `收錄 ${formatNumber(publicVideos.length)}/${formatNumber(videos.length)} 支公開可解析影片`;
-  }
-
-  if (elements.dataHealth) {
-    elements.dataHealth.innerHTML = [
-      `<span>公開可解析 ${formatNumber(publicVideos.length)} 支</span>`,
-      `<span>會員限定未解析 ${formatNumber(memberOnlyVideos.length)} 支</span>`,
-      `<span>置頂時間軸 ${formatNumber(pinnedSources.length)} 支</span>`,
-      `<span>未標註歌手 ${formatNumber(missingArtists)} 筆</span>`,
-      missingDates ? `<span>缺日期 ${formatNumber(missingDates)} 筆</span>` : "",
-      "<span>觀看/按讚/留言樣本為抓取當下數值</span>",
-    ].filter(Boolean).join("");
-  }
 }
 
 function renderQuickSearches() {
@@ -453,7 +431,7 @@ function renderSongRanking(songs) {
     .map((item, index) => ({
       ...item,
       rank: index + 1,
-      topArtist: [...item.artistCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "未標註歌手",
+      topArtist: [...item.artistCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "歌手資訊待補",
     }));
 
   elements.songRanking.innerHTML = ranked.map(renderRankedSong).join("");
@@ -536,7 +514,6 @@ function isMemeSegment(song) {
 
 function renderMemeHighlight(item, index) {
   const meta = [
-    item.commentSampleCount ? `留言樣本 ${formatCompactNumber(item.commentSampleCount)}` : "留言樣本 0",
     item.spCount ? `SP ${item.spCount}` : "",
     item.songCount ? `歌曲 ${item.songCount}` : `${item.rowCount} 個片段`,
     item.streamDate,
@@ -549,7 +526,6 @@ function renderMemeHighlight(item, index) {
         <strong>${escapeHtml(item.videoTitle)}</strong>
         <small>${escapeHtml(meta)}</small>
       </span>
-      <span class="meme-comment-count">${formatCompactNumber(item.commentSampleCount)}</span>
     </button>
   `;
 }
@@ -617,14 +593,14 @@ function renderDataCredits(songs) {
 
   if (!scrapedDates.length) {
     elements.dataUpdated.textContent = "資料更新：-";
-    if (elements.trustUpdated) elements.trustUpdated.textContent = "最後更新：-";
+    if (elements.trustUpdated) elements.trustUpdated.textContent = "更新：-";
     return;
   }
 
   const latest = scrapedDates.sort((a, b) => b.getTime() - a.getTime())[0];
   const formatted = formatDateTime(latest);
   elements.dataUpdated.textContent = `資料更新：${formatted}`;
-  if (elements.trustUpdated) elements.trustUpdated.textContent = `最後更新：${formatted}`;
+  if (elements.trustUpdated) elements.trustUpdated.textContent = `更新：${formatted}`;
   if (elements.feedbackLink) {
     elements.feedbackLink.href = feedbackMailto({
       subject: "綾音Ring 歌回索引資料回報",
@@ -768,12 +744,6 @@ function renderSongRow(song, index) {
   const orderLabel = isCategory ? "片段" : `第 ${song.song_order} 首`;
   const durationLabel = video?.durationSeconds ? `直播 ${formatDuration(video.durationSeconds)}` : "";
   const videoMeta = [song.stream_date, orderLabel, durationLabel, song.video_title].filter(Boolean).join(" · ");
-  const sourceMeta = [
-    song.sourceAuthor ? `時間軸：${song.sourceAuthor}` : "",
-    song.source_comment_is_pinned === "true" ? "置頂留言" : "公開留言",
-    song.scraped_at ? `抓取：${formatDateOnly(song.scraped_at)}` : "",
-    song.parse_status && song.parse_status !== "ok" ? `狀態：${song.parse_status}` : "",
-  ].filter(Boolean).join(" · ");
   const delay = Math.min(index, 10) * 28;
   const versions = isCategory ? [] : getSongVersions(song);
   const fullVideoUrl = video?.video_url || videoUrl(song.video_id);
@@ -801,7 +771,7 @@ function renderSongRow(song, index) {
         </div>
         <p class="song-artist">${escapeHtml(artist)}</p>
         <p class="song-video">${escapeHtml(videoMeta)}</p>
-        <p class="song-source">${escapeHtml(sourceMeta)} · <a href="${escapeAttribute(reportUrl)}">回報錯誤</a></p>
+        <p class="song-source"><a href="${escapeAttribute(reportUrl)}">回報錯誤</a></p>
       </div>
       <div class="song-actions">
         <a class="play-link" href="${escapeAttribute(song.youtube_url)}" target="_blank" rel="noreferrer">${isCategory ? "前往片段" : "原片段"}</a>
@@ -828,7 +798,6 @@ function openTimelineForVideo(videoId, currentVersionKey = "") {
     `${songCount} 首歌`,
     categoryCount ? `${categoryCount} 個片段` : "",
     video?.durationSeconds ? `直播 ${formatDuration(video.durationSeconds)}` : "",
-    video?.selected_comment_author ? `時間軸：${video.selected_comment_author}` : "",
   ].filter(Boolean).join(" · ");
   elements.versionsList.innerHTML = timeline.map((song) => renderTimelineRow(song, currentVersionKey)).join("");
   elements.versionsOverlay.hidden = false;
@@ -839,11 +808,9 @@ function openTimelineForVideo(videoId, currentVersionKey = "") {
 function renderTimelineRow(song, currentVersionKey) {
   const isCurrent = song.versionKey === currentVersionKey;
   const isCategory = song.entryType === "category";
-  const source = song.sourceAuthor ? `時間軸：${song.sourceAuthor}` : "時間軸：未標註";
   const meta = [
     song.timestamp,
     isCategory ? `分類：${song.category || "片段"}` : displayArtist(song),
-    source,
   ].filter(Boolean).join(" · ");
 
   return `
@@ -882,14 +849,10 @@ function closeVersions() {
 
 function renderVersionRow(song) {
   const video = state.videoMetrics.get(song.video_id);
-  const source = song.sourceAuthor ? `時間軸：${song.sourceAuthor}` : "時間軸：未標註";
   const meta = [
     song.stream_date,
     song.timestamp,
     displayArtist(song),
-    video?.viewCount ? `觀看 ${formatCompactNumber(video.viewCount)}` : "",
-    video?.commentSampleCount ? `留言樣本 ${formatCompactNumber(video.commentSampleCount)}` : "",
-    source,
   ].filter(Boolean).join(" · ");
 
   return `
@@ -922,7 +885,7 @@ async function copyUrl(button) {
 }
 
 function displayArtist(song) {
-  return song.canonicalArtist || "未標註歌手";
+  return song.canonicalArtist || "歌手資訊待補";
 }
 
 function setStatus(message, isError = false) {
@@ -940,13 +903,6 @@ function videoUrl(videoId) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat("zh-Hant-TW").format(value);
-}
-
-function formatCompactNumber(value) {
-  return new Intl.NumberFormat("zh-Hant-TW", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
 }
 
 function formatDateTime(date) {

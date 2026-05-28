@@ -553,22 +553,6 @@ a {
   font-size: 13px;
 }
 
-.data-health {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.data-health span {
-  border: 1px solid rgba(255, 248, 239, 0.11);
-  border-radius: 999px;
-  background: rgba(255, 248, 239, 0.045);
-  color: var(--muted);
-  padding: 6px 10px;
-  font-size: 12px;
-}
-
 .daily-pick {
   display: grid;
   grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);
@@ -634,7 +618,7 @@ a {
 
 .meme-item {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-columns: 30px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
   width: 100%;
@@ -675,12 +659,6 @@ a {
 .meme-item-main small {
   color: var(--muted);
   font-size: 12px;
-}
-
-.meme-comment-count {
-  color: var(--gold);
-  font-size: 13px;
-  font-weight: 850;
 }
 
 .workspace {
