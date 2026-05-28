@@ -1,6 +1,7 @@
 const CSV_URL = "./data/songs.csv";
 const VIDEOS_CSV_URL = "./data/videos.csv";
 const PAGE_SIZE = 40;
+const FALLBACK_ARTIST_LABEL = "SP";
 const MEME_SEGMENT_PATTERN = /Yee|PON|翻|奪權|傘電|借你|小火龍|peko|耳膜|大福|紅包|高清清唱|The釣|練舞功|主播登場|好油|喵/i;
 
 const state = {
@@ -431,7 +432,7 @@ function renderSongRanking(songs) {
     .map((item, index) => ({
       ...item,
       rank: index + 1,
-      topArtist: [...item.artistCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "歌手資訊待補",
+      topArtist: [...item.artistCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || FALLBACK_ARTIST_LABEL,
     }));
 
   elements.songRanking.innerHTML = ranked.map(renderRankedSong).join("");
@@ -885,7 +886,7 @@ async function copyUrl(button) {
 }
 
 function displayArtist(song) {
-  return song.canonicalArtist || "歌手資訊待補";
+  return song.canonicalArtist || FALLBACK_ARTIST_LABEL;
 }
 
 function setStatus(message, isError = false) {
