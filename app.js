@@ -1,7 +1,9 @@
 const CSV_URL = "./data/songs.csv";
 const VIDEOS_CSV_URL = "./data/videos.csv";
+const APP_VERSION = "0.2.0";
 const PAGE_SIZE = 40;
-const FALLBACK_ARTIST_LABEL = "SP";
+const SP_CATEGORY_LABEL = "SP";
+const MISSING_ARTIST_LABEL = "未標示歌手";
 const MEME_SEGMENT_PATTERN = /Yee|PON|翻|奪權|傘電|借你|小火龍|peko|耳膜|大福|紅包|高清清唱|The釣|練舞功|主播登場|好油|喵/i;
 
 const state = {
@@ -48,6 +50,7 @@ const elements = {
   dailyVersions: document.querySelector("#dailyVersions"),
   sourceThanks: document.querySelector("#sourceThanks"),
   dataUpdated: document.querySelector("#dataUpdated"),
+  appVersion: document.querySelector("#appVersion"),
   versionsOverlay: document.querySelector("#versionsOverlay"),
   versionsKicker: document.querySelector("#versionsKicker"),
   versionsTitle: document.querySelector("#versionsTitle"),
@@ -59,6 +62,7 @@ init();
 
 async function init() {
   bindEvents();
+  renderAppVersion();
 
   try {
     setStatus("載入歌單資料中");
@@ -70,6 +74,8 @@ async function init() {
     state.videos = parseCsv(videoCsvText).map(enrichVideo);
     state.videoMetrics = new Map(state.videos.map((video) => [video.video_id, video]));
     state.songs = rows.map((row) => enrichSong(row, state.videoMetrics)).filter((song) => song.video_id && song.youtube_url);
+    state.videos = applyComputedVideoEntryCounts(state.videos, state.songs);
+    state.videoMetrics = new Map(state.videos.map((video) => [video.video_id, video]));
     state.songGroups = buildSongGroups(state.songs);
 
     populateYearSelect(state.songs);
@@ -286,20 +292,60 @@ function enrichVideo(video) {
   };
 }
 
+function formatEntryCountParts(songCount, spCount) {
+  return [
+    songCount ? `歌曲 ${songCount}` : "",
+    spCount ? `SP ${spCount}` : "",
+  ].filter(Boolean);
+}
+
+function displayCategory(song) {
+  const category = normalizeCategory(song.category);
+  if (!category || category === "段落") return SP_CATEGORY_LABEL;
+  return category;
+}
+
+function applyComputedVideoEntryCounts(videos, songs) {
+  const countsByVideo = new Map();
+  for (const song of songs) {
+    const current = countsByVideo.get(song.video_id) || {
+      entryCount: 0,
+      songCount: 0,
+      categoryCount: 0,
+    };
+    current.entryCount += 1;
+    if (song.entryType === "song") current.songCount += 1;
+    else current.categoryCount += 1;
+    countsByVideo.set(song.video_id, current);
+  }
+
+  return videos.map((video) => ({
+    ...video,
+    ...(countsByVideo.get(video.video_id) || { entryCount: 0, songCount: 0, categoryCount: 0 }),
+  }));
+}
+
 function enrichSong(song, videoMetrics) {
   const date = song.stream_date ? new Date(`${song.stream_date}T00:00:00`) : null;
   const year = Number(song.stream_date?.slice(0, 4)) || 0;
-  const entryType = song.entry_type || (song.category ? "category" : "song");
-  const category = normalizeCategory(song.category);
+  let entryType = song.entry_type || (song.category ? "category" : "song");
+  let category = normalizeCategory(song.category);
   const canonicalArtist = canonicalizeArtist(song.artist);
   const artistSearchText = artistAliasSearchText(canonicalArtist);
   const sourceAuthor = song.source_comment_author?.trim() || "";
   const videoMetric = videoMetrics.get(song.video_id) || null;
+  if (entryType === "song" && shouldTreatAsSpSegment(song)) {
+    entryType = "category";
+    if (!category) category = SP_CATEGORY_LABEL;
+  }
+  const artistMissingInSource = entryType === "song"
+    && (isTruthy(song.artist_missing_in_source) || isMissingArtistValue(song.artist));
   const normalized = normalizeText([
     song.song_title,
     song.artist,
     canonicalArtist,
     artistSearchText,
+    artistMissingInSource ? MISSING_ARTIST_LABEL : "",
     song.video_title,
     song.timestamp,
     song.raw_entry,
@@ -312,11 +358,12 @@ function enrichSong(song, videoMetrics) {
     entryType,
     category,
     canonicalArtist,
+    artistMissingInSource,
     sourceAuthor,
     videoMetric,
     normalized,
     titleNormalized: normalizeText(song.song_title),
-    artistNormalized: normalizeText([song.artist, canonicalArtist, artistSearchText].join(" ")),
+    artistNormalized: normalizeText([song.artist, canonicalArtist, artistSearchText, artistMissingInSource ? MISSING_ARTIST_LABEL : ""].join(" ")),
     videoNormalized: normalizeText(song.video_title),
     isSleep: isSleepStreamTitle(song.video_title),
     isTheme: !isSleepStreamTitle(song.video_title),
@@ -344,25 +391,82 @@ function numberField(value) {
 function normalizeCategory(category) {
   const value = String(category || "").trim();
   if (value === "週表") return "周表";
-  if (/^sp$/i.test(value)) return "SP";
+  if (/^sp$/i.test(value)) return SP_CATEGORY_LABEL;
   return value;
 }
 
+function isTruthy(value) {
+  return /^(?:true|1|yes)$/i.test(String(value || "").trim());
+}
+
+function isMissingArtistValue(artist) {
+  const normalized = normalizeText(artist);
+  if (!normalized) return true;
+  const unlabeledArtistValues = new Set(["未標示歌手", "未標示", "未標註歌手", "未標註", "未知", "unknown", "n/a", "na", "-", "sp"]);
+  return unlabeledArtistValues.has(normalized);
+}
+
 function canonicalizeArtist(artist) {
-  const value = String(artist || "").trim();
+  const value = cleanArtistValue(artist);
   if (!value) return "";
-  const normalized = normalizeText(value);
-  const unlabeledArtistValues = new Set(["未標註歌手", "未標註", "未知", "unknown", "n/a", "na", "-"]);
-  if (unlabeledArtistValues.has(normalized)) {
+  if (isMissingArtistValue(value)) {
     return "";
   }
-  if (normalized === normalizeText("周杰倫 Jay Chou") || normalized === normalizeText("Jay Chou")) {
-    return "周杰倫";
-  }
-  if (normalized === "by2") {
-    return "BY2";
-  }
+  const normalized = normalizeText(value);
+  const compact = normalized.replace(/\s+/g, "");
+  const compactNoDots = compact.replace(/[.。]/g, "");
+  if (
+    compact.includes("taylorswift")
+    || compact.includes("taylorswi&")
+    || compact.includes("\u6cf0\u52d2\u7d72")
+    || compact.includes("\u6cf0\u52d2\u65af")
+  ) return "Taylor Swift";
+  const aliases = new Map([
+    ["周杰倫jaychou", "周杰倫"],
+    ["jaychou", "周杰倫"],
+    ["蔡依林jolintsai", "蔡依林"],
+    ["田馥甄hebe", "田馥甄"],
+    ["盧廣仲crowdlu", "盧廣仲"],
+    ["芒果醬mangojump", "芒果醬"],
+    ["任賢齊richiejen", "任賢齊"],
+    ["泰勒絲taylorswift", "Taylor Swift"],
+    ["taylorswift泰勒斯", "Taylor Swift"],
+    ["泰勒斯taylorswift", "Taylor Swift"],
+    ["小賈斯汀justinbieber", "Justin Bieber"],
+    ["老菸槍thechainsmokers", "The Chainsmokers"],
+    ["thechainsmokers老菸槍雙人組", "The Chainsmokers"],
+    ["onerepublic", "OneRepublic"],
+    ["sixpencenonethericher", "Sixpence None the Richer"],
+    ["tank", "TANK"],
+    ["tuki", "tuki."],
+    ["ella", "ELLA"],
+    ["by2", "BY2"],
+    ["fir", "F.I.R."],
+  ]);
+  if (aliases.has(compact)) return aliases.get(compact);
+  if (aliases.has(compactNoDots)) return aliases.get(compactNoDots);
   return value;
+}
+
+function cleanArtistValue(artist) {
+  return String(artist || "")
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s*(?:<{2,}|＜{2,}).*$/u, "")
+    .replace(/\s*(?<!\d)(?:\d{1,2}:)?\d{1,2}:\d{2}(?!\d).*$/u, "")
+    .replace(/:[A-Za-z0-9_+-]+:/g, " ")
+    .replace(/[\u{1F300}-\u{1FAFF}]/gu, " ")
+    .replace(/\s*[<〈《].*?[>〉》]\s*$/u, "")
+    .replace(/\s*[〈《][^〉》]+[〉》]\s*$/u, "")
+    .replace(/\s*[（(][^）)]*(?:升key|清唱|副歌|寫的詞|唱法|伴奏|版|原LEY|PON)[^）)]*[）)]\s*$/iu, "")
+    .replace(/\s*ver\s*$/i, "")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+(?:feat\.?|ft\.?)\s*/gi, "&")
+    .replace(/([\p{Script=Han}])\s*[xX]\s*([\p{Script=Han}])/gu, "$1&$2")
+    .replace(/\s*[＆&]\s*/g, "&")
+    .replace(/\s*、\s*/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function artistAliasSearchText(canonicalArtist) {
@@ -380,7 +484,7 @@ function populateYearSelect(songs) {
 function renderStats(songs) {
   const songEntries = songs.filter((song) => song.entryType === "song");
   const streams = new Set(songs.map((song) => song.video_id));
-  const artists = new Set(songEntries.map((song) => song.canonicalArtist).filter((artist) => artist && artist !== FALLBACK_ARTIST_LABEL));
+  const artists = new Set(songEntries.map((song) => song.canonicalArtist).filter(Boolean));
   const dates = songs.map((song) => song.stream_date).filter(Boolean).sort();
 
   elements.statSongs.textContent = formatNumber(songEntries.length);
@@ -403,7 +507,7 @@ function renderArtistCloud(songs) {
   for (const song of songs) {
     if (song.entryType !== "song") continue;
     const artist = song.canonicalArtist;
-    if (!artist || artist === FALLBACK_ARTIST_LABEL) continue;
+    if (!artist) continue;
     counts.set(artist, (counts.get(artist) || 0) + 1);
   }
 
@@ -428,7 +532,6 @@ function renderSongRanking(songs) {
   const counts = new Map();
   for (const song of songs) {
     if (!isSongCandidate(song)) continue;
-    if (!song.canonicalArtist || song.canonicalArtist === FALLBACK_ARTIST_LABEL) continue;
     const title = song.song_title.trim();
     if (!title) continue;
     const key = normalizeText(title);
@@ -447,7 +550,7 @@ function renderSongRanking(songs) {
     .map((item, index) => ({
       ...item,
       rank: index + 1,
-      topArtist: [...item.artistCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || FALLBACK_ARTIST_LABEL,
+      topArtist: [...item.artistCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || MISSING_ARTIST_LABEL,
     }));
 
   elements.songRanking.innerHTML = ranked.map(renderRankedSong).join("");
@@ -487,8 +590,7 @@ function renderThemeItem(video, index) {
   const label = themeTitle(video.video_title);
   const meta = [
     video.stream_date,
-    video.songCount ? `${video.songCount} 首` : "",
-    video.categoryCount ? `${video.categoryCount} 個片段` : "",
+    ...formatEntryCountParts(video.songCount, video.categoryCount),
   ].filter(Boolean).join(" · ");
 
   return `
@@ -533,9 +635,9 @@ function buildMemeHighlights(songs, videos) {
 
     current.rowCount += 1;
     if (song.entryType === "song") current.songCount += 1;
+    else current.spCount += 1;
     if (isMemeSegment(song)) {
       current.segments.push(song);
-      if (song.category === "SP") current.spCount += 1;
     }
     songStatsByVideo.set(song.video_id, current);
   }
@@ -579,10 +681,11 @@ function isMemeSegment(song) {
 }
 
 function renderMemeHighlight(item, index) {
+  const countMeta = formatEntryCountParts(item.songCount, item.spCount);
+  if (!countMeta.length) countMeta.push(`SP ${item.rowCount}`);
   const meta = [
-    item.spCount ? `SP ${item.spCount}` : "",
-    item.songCount ? `歌曲 ${item.songCount}` : `${item.rowCount} 個片段`,
     item.streamDate,
+    ...countMeta,
   ].filter(Boolean).join(" · ");
 
   return `
@@ -598,7 +701,7 @@ function renderMemeHighlight(item, index) {
 
 function initRandomPick(songs) {
   state.randomPool = songs
-    .filter((song) => isSongCandidate(song) && song.canonicalArtist !== FALLBACK_ARTIST_LABEL)
+    .filter((song) => isSongCandidate(song))
     .sort((a, b) => a.song_title.localeCompare(b.song_title, "zh-Hant") || a.video_id.localeCompare(b.video_id) || a.seconds - b.seconds);
 
   renderRandomPick();
@@ -643,6 +746,12 @@ function pickRandomSong(avoidCurrent = false) {
     song = state.randomPool[Math.floor(Math.random() * state.randomPool.length)];
   }
   return song;
+}
+
+function renderAppVersion() {
+  if (elements.appVersion) {
+    elements.appVersion.textContent = `網站版本：v${APP_VERSION}`;
+  }
 }
 
 function renderDataCredits(songs) {
@@ -707,12 +816,20 @@ function getSongsByVideo(videoId) {
 
 function isSongCandidate(song) {
   return song.entryType === "song"
-    && Boolean(song.song_title.trim())
-    && !isLikelyNonSongSegment(song.song_title);
+    && Boolean(song.song_title.trim());
+}
+
+function shouldTreatAsSpSegment(song) {
+  if (normalizeCategory(song.category)) return true;
+  return false;
+}
+
+function hasSongListNumber(rawEntry) {
+  return /^\s*\d{1,2}(?:\.\d+)?\s*[.)、．-]\s*/.test(String(rawEntry || "").replace(/\u00a0/g, " "));
 }
 
 function isLikelyNonSongSegment(title) {
-  return /周表|週表|^sp$|閒聊|雜談|公告|開場|中場|休息|棉花糖|superchat|shorts|讀留言|回應留言/i.test(String(title || ""));
+  return /周表|週表|^sp$|閒聊|雜談|公告|開場|中場|休息|棉花糖|superchat|shorts|讀留言|回應留言|自我介紹|吉祥物|建模|營運|送禮|福利|事故|抓包|主播|登場|斗內|紅包|噴嚏|呵欠|忘詞|宣傳|安可|初配信|回顧|彩蛋|鎮樓|語錄|笑聲|悲鳴|抄作業|投稿|抽到|開抽|沒電|點餐/i.test(String(title || ""));
 }
 
 function renderRankedSong(item) {
@@ -737,7 +854,7 @@ function applyFilters() {
     if (state.filter === "sleep" && !song.isSleep) return false;
     if (state.filter === "theme" && !song.isTheme) return false;
     if (state.filter === "schedule" && song.category !== "周表") return false;
-    if (state.filter === "sp" && song.category !== "SP" && song.canonicalArtist !== FALLBACK_ARTIST_LABEL) return false;
+    if (state.filter === "sp" && song.entryType !== "category") return false;
     if (!tokens.length) return true;
     return tokens.every((token) => song.normalized.includes(token));
   });
@@ -800,7 +917,7 @@ function renderResults() {
 
   if (!state.filtered.length) {
     elements.resultsList.innerHTML = "";
-    setStatus("沒有找到符合條件的歌曲。");
+    setStatus("沒有找到符合條件的資料。");
     return;
   }
 
@@ -810,9 +927,9 @@ function renderResults() {
 
 function renderSongRow(song, index) {
   const isCategory = song.entryType === "category";
-  const artist = isCategory ? `分類：${song.category || "段落"}` : displayArtist(song);
+  const artist = isCategory ? displayCategory(song) : displayArtist(song);
   const video = state.videoMetrics.get(song.video_id);
-  const orderLabel = isCategory ? "片段" : `第 ${song.song_order} 首`;
+  const orderLabel = isCategory ? displayCategory(song) : `第 ${song.song_order} 首`;
   const durationLabel = video?.durationSeconds ? `直播 ${formatDuration(video.durationSeconds)}` : "";
   const videoMeta = [song.stream_date, orderLabel, durationLabel, song.video_title].filter(Boolean).join(" · ");
   const delay = Math.min(index, 10) * 28;
@@ -828,6 +945,10 @@ function renderSongRow(song, index) {
       `timestamp: ${song.timestamp}`,
       `song_title: ${song.song_title}`,
       `artist: ${song.artist}`,
+      `entry_type: ${song.entryType}`,
+      `category: ${song.category}`,
+      `display_label: ${isCategory ? displayCategory(song) : displayArtist(song)}`,
+      `artist_missing_in_source: ${song.artistMissingInSource ? "true" : "false"}`,
     ].join("\n"),
   });
 
@@ -837,7 +958,7 @@ function renderSongRow(song, index) {
       <div class="song-main">
         <div class="song-title-line">
           <span class="timestamp">${escapeHtml(song.timestamp)}</span>
-          ${isCategory ? `<span class="category-badge">${escapeHtml(song.category || "分類")}</span>` : ""}
+          ${isCategory ? `<span class="category-badge">${escapeHtml(displayCategory(song))}</span>` : ""}
           <h3 title="${escapeAttribute(song.song_title)}">${escapeHtml(song.song_title)}</h3>
         </div>
         <p class="song-artist">${escapeHtml(artist)}</p>
@@ -845,7 +966,7 @@ function renderSongRow(song, index) {
         <p class="song-source"><a href="${escapeAttribute(reportUrl)}">回報錯誤</a></p>
       </div>
       <div class="song-actions">
-        <a class="play-link" href="${escapeAttribute(song.youtube_url)}" target="_blank" rel="noreferrer">${isCategory ? "前往片段" : "原片段"}</a>
+        <a class="play-link" href="${escapeAttribute(song.youtube_url)}" target="_blank" rel="noreferrer">${isCategory ? "前往" : "播放"}</a>
         <button class="copy-button timeline-button" type="button" data-video-timeline="${escapeAttribute(song.video_id)}" data-current-song="${escapeAttribute(song.versionKey)}">同場歌單</button>
         <a class="copy-button" href="${escapeAttribute(fullVideoUrl)}" target="_blank" rel="noreferrer">完整直播</a>
         ${!isCategory ? `<button class="copy-button version-button" type="button" data-version-key="${escapeAttribute(song.versionKey)}">${versions.length} 版</button>` : ""}
@@ -866,8 +987,7 @@ function openTimelineForVideo(videoId, currentVersionKey = "") {
   elements.versionsTitle.textContent = "直播歌單";
   elements.versionsMeta.textContent = [
     video?.stream_date || timeline[0]?.stream_date,
-    `${songCount} 首歌`,
-    categoryCount ? `${categoryCount} 個片段` : "",
+    ...formatEntryCountParts(songCount, categoryCount),
     video?.durationSeconds ? `直播 ${formatDuration(video.durationSeconds)}` : "",
   ].filter(Boolean).join(" · ");
   elements.versionsList.innerHTML = timeline.map((song) => renderTimelineRow(song, currentVersionKey)).join("");
@@ -881,7 +1001,7 @@ function renderTimelineRow(song, currentVersionKey) {
   const isCategory = song.entryType === "category";
   const meta = [
     song.timestamp,
-    isCategory ? `分類：${song.category || "片段"}` : displayArtist(song),
+    isCategory ? displayCategory(song) : displayArtist(song),
   ].filter(Boolean).join(" · ");
 
   return `
@@ -934,7 +1054,7 @@ function renderVersionRow(song) {
         <h3>${escapeHtml(song.video_title)}</h3>
       </div>
       <div class="version-actions">
-        <a class="play-link" href="${escapeAttribute(song.youtube_url)}" target="_blank" rel="noreferrer">原片段</a>
+        <a class="play-link" href="${escapeAttribute(song.youtube_url)}" target="_blank" rel="noreferrer">播放</a>
         <a class="copy-button" href="${escapeAttribute(video?.video_url || videoUrl(song.video_id))}" target="_blank" rel="noreferrer">完整直播</a>
         <button class="copy-button" type="button" data-copy-url="${escapeAttribute(song.youtube_url)}">複製</button>
       </div>
@@ -956,7 +1076,7 @@ async function copyUrl(button) {
 }
 
 function displayArtist(song) {
-  return song.canonicalArtist || FALLBACK_ARTIST_LABEL;
+  return song.canonicalArtist || MISSING_ARTIST_LABEL;
 }
 
 function isSleepStreamTitle(title) {
